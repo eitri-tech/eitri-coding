@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "eitri-coding",
-      "source": "../eitri-coding",
+      "source": "./plugins/eitri-coding",
       "description": "Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and interacts with Android devices via ADB"
     }
   ]
