@@ -1,0 +1,13 @@
+{
+  "name": "eitri-plugins",
+  "owner": {
+    "name": "Gabriel Fonseca"
+  },
+  "plugins": [
+    {
+      "name": "eitri-coding",
+      "source": ".",
+      "description": "Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and interacts with Android devices via ADB"
+    }
+  ]
+}
