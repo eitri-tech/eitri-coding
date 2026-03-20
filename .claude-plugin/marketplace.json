@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "eitri-coding",
-      "source": "..",
+      "source": "./plugins/eitri-coding",
       "description": "Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and interacts with Android devices via ADB. Use this plugin to create, debug, and optimize eitri-apps, ensuring they are performant and user-friendly. Ideal for developing responsive web applications and managing Android device interactions."
     }
   ]

@@ -138,7 +138,7 @@ export default function ProductList({ id, name }) { ... }
 You interact with the Android app via:
 
 ```
-./~/.claude/skills/eitri-coding/tools/android.py
+~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py
 ```
 
 ### Available Commands
@@ -192,15 +192,15 @@ The Eitri dev server is active. Send key events to open the app inside EitriPlay
 
 ```bash
 # Press 'A' to focus the workspace selector, then ENTER to open the app
-python3 ~/.claude/skills/eitri-coding/tools/android.py key A
-python3 ~/.claude/skills/eitri-coding/tools/android.py key ENTER
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py key A
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py key ENTER
 ```
 
 Then wait for the app to load and validate:
 
 ```bash
-python3 ~/.claude/skills/eitri-coding/tools/android.py wait_for_text "YOUR_APP_INDICATOR"
-python3 ~/.claude/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_for_text "YOUR_APP_INDICATOR"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 ```
 
 **Step 3 — If NO `eitri start` instance is running:**
@@ -230,10 +230,10 @@ When the user asks to work on, inspect, or interact with a specific page/screen,
 
 ```bash
 # Example: user asks to work on the Cart page
-python3 ~/.claude/skills/eitri-coding/tools/android.py screenshot
-python3 ~/.claude/skills/eitri-coding/tools/android.py tap_text "Cart"
-python3 ~/.claude/skills/eitri-coding/tools/android.py wait_for_text "My Cart"
-python3 ~/.claude/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Cart"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_for_text "My Cart"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 ```
 
 Never assume the current screen is the target — always verify.
@@ -242,21 +242,21 @@ Never assume the current screen is the target — always verify.
 
 ```bash
 # 1. Observe (ui_tree is NOT useful for Eitri apps — WebView hides all content)
-python3 ~/.claude/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 
 # 2. Interact (prefer text-based targeting)
-python3 ~/.claude/skills/eitri-coding/tools/android.py tap_text "Login"
-python3 ~/.claude/skills/eitri-coding/tools/android.py type_text "gabriel@email.com"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Login"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py type_text "gabriel@email.com"
 
 # 3. Navigate
-python3 ~/.claude/skills/eitri-coding/tools/android.py swipe up
-python3 ~/.claude/skills/eitri-coding/tools/android.py key ENTER
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py swipe up
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py key ENTER
 
 # 4. Wait for dynamic content
-python3 ~/.claude/skills/eitri-coding/tools/android.py wait_for_text "Welcome"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_for_text "Welcome"
 
 # 5. Validate
-python3 ~/.claude/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 ```
 
 ---
