@@ -143,17 +143,17 @@ You interact with the Android app via:
 
 ### Available Commands
 
-| Command                | Description                               |
-| ---------------------- | ----------------------------------------- |
-| `screenshot`           | Capture current screen state              |
+| Command                | Description                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `screenshot`           | Capture current screen state                                                                      |
 | `screenshot_grid [N]`  | Screenshot with coordinate grid every N px (default 100) — use when `tap x y` precision is needed |
-| `ui_tree`              | Dump the full XML UI hierarchy            |
-| `tap x y`              | Tap at absolute coordinates               |
-| `tap_text "text"`      | Tap an element by its visible text        |
-| `type_text "text"`     | Type text into a focused input field      |
-| `swipe direction`      | Swipe in a direction (up/down/left/right) |
-| `key keycode`          | Send a key event (e.g., BACK, ENTER)      |
-| `wait_for_text "text"` | Block until text appears on screen        |
+| `ui_tree`              | Dump the full XML UI hierarchy                                                                    |
+| `tap x y`              | Tap at absolute coordinates                                                                       |
+| `tap_text "text"`      | Tap an element by its visible text                                                                |
+| `type_text "text"`     | Type text into a focused input field                                                              |
+| `swipe direction`      | Swipe in a direction (up/down/left/right)                                                         |
+| `key keycode`          | Send a key event (e.g., BACK, ENTER)                                                              |
+| `wait_for_text "text"` | Block until text appears on screen                                                                |
 
 ### WebView Limitation
 
@@ -177,6 +177,14 @@ Eitri apps run inside an Android **WebView**. Because of this, `ui_tree` will **
 ### App Startup Protocol
 
 Before interacting with the device, check whether the Eitri-App is already open. If the device is connected but no app is visible, follow this decision flow:
+
+**Before Running**
+
+You should grantee the dependêncie of tools for Android interaction is installed:
+
+```bash
+  pip install easyocr opencv-python-headless==4.10.0.84 --break-system-packages
+```
 
 **Step 1 — Check for a running `eitri start` process:**
 
@@ -208,6 +216,7 @@ python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills
 Start the dev server first, then proceed with the key events above.
 
 - **Single app** (standard `eitri-app.conf.js` present):
+
   ```bash
   eitri start
   ```

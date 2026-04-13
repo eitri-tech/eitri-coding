@@ -6,60 +6,54 @@ import time
 import xml.etree.ElementTree as ET
 import re
 import os
-import struct
+import json
+import cv2
+import numpy as np
+import hashlib
+
+import easyocr
+
+# Inicializa OCR (lazy loading seria possível também)
+reader = easyocr.Reader(['pt', 'en'], gpu=False)
 
 TMP_XML = "/tmp/ui.xml"
 TMP_SCREEN = "/tmp/screen.png"
 
+_last_screen_hash = None
+
+
+# ------------------------
+# CORE
+# ------------------------
 
 def run(cmd):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout.strip()
 
 
+def log(data):
+    print(json.dumps(data))
+
+
 # ------------------------
-# BASIC COMMANDS
+# SCREEN / DEVICE
 # ------------------------
 
 def screenshot():
     run(f"adb exec-out screencap -p > {TMP_SCREEN}")
-    print(TMP_SCREEN)
+    return TMP_SCREEN
 
 
-def screenshot_grid(step=100):
-    """Capture screenshot and overlay a coordinate grid for precise tapping."""
-    from PIL import Image, ImageDraw, ImageFont
+def screen_hash():
+    global _last_screen_hash
 
-    run(f"adb exec-out screencap -p > {TMP_SCREEN}")
+    with open(TMP_SCREEN, "rb") as f:
+        h = hashlib.md5(f.read()).hexdigest()
 
-    img = Image.open(TMP_SCREEN)
-    draw = ImageDraw.Draw(img)
-    w, h = img.size
+    changed = h != _last_screen_hash
+    _last_screen_hash = h
 
-    step = int(step)
-
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-    except Exception:
-        font = ImageFont.load_default()
-
-    for x in range(0, w, step):
-        draw.line([(x, 0), (x, h)], fill=(255, 0, 0, 160), width=1)
-        draw.text((x + 2, 2), str(x), fill=(255, 0, 0), font=font)
-
-    for y in range(0, h, step):
-        draw.line([(0, y), (w, y)], fill=(255, 0, 0, 160), width=1)
-        draw.text((2, y + 2), str(y), fill=(255, 0, 0), font=font)
-
-    out = "/tmp/screen_grid.png"
-    img.save(out)
-    print(out)
-
-
-def ui_tree():
-    run("adb shell uiautomator dump /sdcard/ui.xml")
-    run(f"adb pull /sdcard/ui.xml {TMP_XML}")
-    print(TMP_XML)
+    return changed
 
 
 def get_display_size():
@@ -70,35 +64,21 @@ def get_display_size():
     return None, None
 
 
-def get_screenshot_size():
-    if not os.path.exists(TMP_SCREEN):
-        return None, None
-    with open(TMP_SCREEN, 'rb') as f:
-        f.read(16)  # skip PNG signature + IHDR chunk header
-        w = struct.unpack('>I', f.read(4))[0]
-        h = struct.unpack('>I', f.read(4))[0]
-    return w, h
-
-
 def tap(x, y):
     x, y = int(x), int(y)
-    disp_w, disp_h = get_display_size()
-    scr_w, scr_h = get_screenshot_size()
-
-    if disp_w and scr_w and (disp_w != scr_w or disp_h != scr_h):
-        scaled_x = int(x * disp_w / scr_w)
-        scaled_y = int(y * disp_h / scr_h)
-        print(f"Scaling tap from screenshot ({x},{y}) to display ({scaled_x},{scaled_y})")
-        x, y = scaled_x, scaled_y
-
     run(f"adb shell input tap {x} {y}")
-    print(f"Tapped at {x},{y}")
+    return {"action": "tap", "x": x, "y": y}
+
+
+def tap_percent(px, py):
+    w, h = get_display_size()
+    return tap(int(px * w), int(py * h))
 
 
 def type_text(text):
     text = text.replace(" ", "%s")
     run(f'adb shell input text "{text}"')
-    print(f"Typed: {text}")
+    return {"action": "type", "text": text}
 
 
 def swipe(direction):
@@ -110,129 +90,229 @@ def swipe(direction):
     }
 
     if direction not in coords:
-        print("Invalid direction")
-        return
+        return {"error": "invalid direction"}
 
     run(f"adb shell input swipe {coords[direction]}")
-    print(f"Swiped {direction}")
-
-
-def key(keycode):
-    run(f"adb shell input keyevent {keycode}")
-    print(f"Pressed {keycode}")
+    return {"action": "swipe", "direction": direction}
 
 
 # ------------------------
-# XML PARSING
+# XML
 # ------------------------
+
+def ui_tree():
+    run("adb shell uiautomator dump /sdcard/ui.xml")
+    run(f"adb pull /sdcard/ui.xml {TMP_XML}")
+    return TMP_XML
+
 
 def parse_bounds(bounds):
-    # formato: [x1,y1][x2,y2]
     nums = list(map(int, re.findall(r'\d+', bounds)))
     x = (nums[0] + nums[2]) // 2
     y = (nums[1] + nums[3]) // 2
     return x, y
 
 
-def load_xml():
-    if not os.path.exists(TMP_XML):
-        ui_tree()
-
-    return ET.parse(TMP_XML).getroot()
-
-
-def find_element_by_text(text, partial=True):
-    root = load_xml()
+def find_element_by_text(text):
+    ui_tree()
+    root = ET.parse(TMP_XML).getroot()
 
     for node in root.iter():
-        node_text = node.attrib.get("text", "")
-        content_desc = node.attrib.get("content-desc", "")
+        t = node.attrib.get("text", "")
+        d = node.attrib.get("content-desc", "")
 
-        if partial:
-            if text.lower() in node_text.lower() or text.lower() in content_desc.lower():
-                return node
-        else:
-            if text == node_text:
-                return node
+        if text.lower() in t.lower() or text.lower() in d.lower():
+            bounds = node.attrib.get("bounds")
+            if bounds:
+                return {
+                    "x": parse_bounds(bounds)[0],
+                    "y": parse_bounds(bounds)[1],
+                    "confidence": 1.0
+                }
 
     return None
 
 
 # ------------------------
-# SMART ACTIONS
+# OCR (EasyOCR)
 # ------------------------
 
-def tap_text(text):
-    node = find_element_by_text(text)
-
-    if not node:
-        print(f"Element not found: {text}")
-        return
-
-    bounds = node.attrib.get("bounds")
-    x, y = parse_bounds(bounds)
-
-    tap(x, y)
+def preprocess_image(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    return gray
 
 
-def wait_for_text(text, timeout=10):
+def find_text_ocr(text):
+    screenshot()
+
+    img = cv2.imread(TMP_SCREEN)
+    img = preprocess_image(img)
+
+    results = reader.readtext(img)
+
+    best_match = None
+
+    for (bbox, detected, conf) in results:
+        if text.lower() in detected.lower():
+            (tl, tr, br, bl) = bbox
+            x = int((tl[0] + br[0]) / 2)
+            y = int((tl[1] + br[1]) / 2)
+
+            if not best_match or conf > best_match["confidence"]:
+                best_match = {
+                    "x": x,
+                    "y": y,
+                    "confidence": float(conf),
+                    "text": detected
+                }
+
+    return best_match
+
+
+# ------------------------
+# TEMPLATE MATCHING
+# ------------------------
+
+def find_template(path):
+    screenshot()
+
+    screen = cv2.imread(TMP_SCREEN)
+    template = cv2.imread(path)
+
+    if screen is None or template is None:
+        return None
+
+    result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+    if max_val > 0.8:
+        h, w, _ = template.shape
+        return {
+            "x": max_loc[0] + w // 2,
+            "y": max_loc[1] + h // 2,
+            "confidence": float(max_val)
+        }
+
+    return None
+
+
+# ------------------------
+# INTELLIGENCE
+# ------------------------
+
+def wait_for(fn, timeout=10, interval=0.5):
     start = time.time()
 
     while time.time() - start < timeout:
-        ui_tree()
-        node = find_element_by_text(text)
+        result = fn()
+        if result:
+            return result
+        time.sleep(interval)
 
-        if node:
-            print(f"Found: {text}")
-            return True
+    return None
 
+
+def retry(fn, attempts=3):
+    for _ in range(attempts):
+        result = fn()
+        if result:
+            return result
         time.sleep(1)
+    return None
 
-    print(f"Timeout waiting for: {text}")
-    return False
+
+def smart_find(text=None, template=None):
+    # 1. XML (rápido)
+    if text:
+        pos = find_element_by_text(text)
+        if pos:
+            pos["method"] = "xml"
+            return pos
+
+    # 2. OCR (robusto)
+    if text:
+        pos = find_text_ocr(text)
+        if pos:
+            pos["method"] = "ocr"
+            return pos
+
+    # 3. Template (ícones)
+    if template:
+        pos = find_template(template)
+        if pos:
+            pos["method"] = "template"
+            return pos
+
+    return None
+
+
+def smart_tap(text=None, template=None):
+    result = retry(lambda: smart_find(text, template))
+
+    if not result:
+        return {"error": "element not found", "text": text}
+
+    tap(result["x"], result["y"])
+    result["action"] = "tap"
+    return result
+
+
+def smart_wait(text=None, timeout=10):
+    result = wait_for(lambda: smart_find(text), timeout=timeout)
+
+    if not result:
+        return {"error": "timeout", "text": text}
+
+    return {
+        "found": True,
+        "method": result["method"],
+        "confidence": result.get("confidence", 1.0)
+    }
 
 
 # ------------------------
-# MAIN
+# MAIN (LLM TOOL)
 # ------------------------
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: android.py <command>")
+        log({"error": "no command"})
         return
 
     cmd = sys.argv[1]
 
-    if cmd == "screenshot":
-        screenshot()
+    try:
+        if cmd == "tap_text":
+            log(smart_tap(text=sys.argv[2]))
 
-    elif cmd == "screenshot_grid":
-        step = sys.argv[2] if len(sys.argv) > 2 else 100
-        screenshot_grid(step)
+        elif cmd == "tap_template":
+            log(smart_tap(template=sys.argv[2]))
 
-    elif cmd == "ui_tree":
-        ui_tree()
+        elif cmd == "wait_text":
+            timeout = int(sys.argv[3]) if len(sys.argv) > 3 else 10
+            log(smart_wait(text=sys.argv[2], timeout=timeout))
 
-    elif cmd == "tap":
-        tap(sys.argv[2], sys.argv[3])
+        elif cmd == "type":
+            log(type_text(sys.argv[2]))
 
-    elif cmd == "tap_text":
-        tap_text(sys.argv[2])
+        elif cmd == "swipe":
+            log(swipe(sys.argv[2]))
 
-    elif cmd == "type_text":
-        type_text(sys.argv[2])
+        elif cmd == "tap_xy":
+            log(tap(sys.argv[2], sys.argv[3]))
 
-    elif cmd == "swipe":
-        swipe(sys.argv[2])
+        elif cmd == "tap_percent":
+            log(tap_percent(float(sys.argv[2]), float(sys.argv[3])))
 
-    elif cmd == "key":
-        key(sys.argv[2])
+        elif cmd == "screenshot":
+            path = screenshot()
+            log({"screenshot": path})
 
-    elif cmd == "wait_for_text":
-        wait_for_text(sys.argv[2])
+        else:
+            log({"error": "unknown command"})
 
-    else:
-        print("Unknown command")
+    except Exception as e:
+        log({"error": str(e)})
 
 
 if __name__ == "__main__":
