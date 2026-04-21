@@ -114,6 +114,8 @@ Eitri does **not** use `App.tsx`. Centralize all global state in the `providers`
 - **No HTML tags:** `div`, `span`, `img`, `p`, `button`, etc. are **strictly forbidden** — use `eitri-luminus` components only
 - **Prohibited Tailwind utilities:** Do **not** use `hover:`, `focus-within:`, `active:`, or `focus:` — these cause "stuck" states on mobile touchscreens
 - **Sizing props:** `width`, `height`, `maxWidth`, `maxHeight`, `minWidth`, and `minHeight` are valid as direct component props
+- **Default orientation** By default views are in `row` orientation. Use the `orientation` prop to switch to `column` when needed.
+- **Layout** Only do layout for mobile devices because Eitri apps are mobile mini-apps.
 
 ### Component Structure
 
