@@ -113,24 +113,53 @@ def parse_bounds(bounds):
     return x, y
 
 
+def _clickable_ancestor(node, parents):
+    cur = node
+    while cur is not None:
+        if cur.attrib.get("clickable") == "true" and cur.attrib.get("bounds"):
+            return cur
+        cur = parents.get(cur)
+    return None
+
+
 def find_element_by_text(text):
     ui_tree()
-    root = ET.parse(TMP_XML).getroot()
+    tree = ET.parse(TMP_XML)
+    root = tree.getroot()
+    parents = {child: parent for parent in root.iter() for child in parent}
+
+    target = text.lower()
+    exact_match = None
+    contains_match = None
 
     for node in root.iter():
-        t = node.attrib.get("text", "")
-        d = node.attrib.get("content-desc", "")
+        t = node.attrib.get("text", "") or ""
+        d = node.attrib.get("content-desc", "") or ""
+        tl, dl = t.lower(), d.lower()
 
-        if text.lower() in t.lower() or text.lower() in d.lower():
-            bounds = node.attrib.get("bounds")
-            if bounds:
-                return {
-                    "x": parse_bounds(bounds)[0],
-                    "y": parse_bounds(bounds)[1],
-                    "confidence": 1.0
-                }
+        if tl == target or dl == target:
+            exact_match = node
+            break
+        if contains_match is None and (target in tl or target in dl):
+            contains_match = node
 
-    return None
+    node = exact_match or contains_match
+    if node is None:
+        return None
+
+    clickable = _clickable_ancestor(node, parents) or node
+    bounds = clickable.attrib.get("bounds") or node.attrib.get("bounds")
+    if not bounds:
+        return None
+
+    x, y = parse_bounds(bounds)
+    return {
+        "x": x,
+        "y": y,
+        "confidence": 1.0,
+        "exact": exact_match is not None,
+        "clickable_ancestor": clickable is not node,
+    }
 
 
 # ------------------------
@@ -246,15 +275,82 @@ def smart_find(text=None, template=None):
     return None
 
 
-def smart_tap(text=None, template=None):
+def wait_for_screen_change(timeout=3, interval=0.2):
+    # prime baseline
+    screenshot()
+    screen_hash()
+
+    start = time.time()
+    while time.time() - start < timeout:
+        time.sleep(interval)
+        screenshot()
+        if screen_hash():
+            return True
+    return False
+
+
+def smart_tap(text=None, template=None, wait_change=True):
     result = retry(lambda: smart_find(text, template))
 
     if not result:
         return {"error": "element not found", "text": text}
 
+    if wait_change:
+        screenshot()
+        screen_hash()
+
     tap(result["x"], result["y"])
     result["action"] = "tap"
+
+    if wait_change:
+        result["screen_changed"] = wait_for_screen_change(timeout=3)
+
     return result
+
+
+def scroll_until_found(text=None, template=None, direction="up", max_swipes=10):
+    # direction = content motion: "up" reveals what's below, "down" reveals what's above
+    if direction not in ("up", "down", "left", "right"):
+        return {"error": "invalid direction", "direction": direction}
+
+    # already visible?
+    pos = smart_find(text=text, template=template)
+    if pos:
+        pos["swipes"] = 0
+        return pos
+
+    for i in range(1, max_swipes + 1):
+        screenshot()
+        before = hashlib.md5(open(TMP_SCREEN, "rb").read()).hexdigest()
+
+        swipe(direction)
+        time.sleep(0.6)  # let inertia settle
+
+        screenshot()
+        after = hashlib.md5(open(TMP_SCREEN, "rb").read()).hexdigest()
+
+        pos = smart_find(text=text, template=template)
+        if pos:
+            pos["swipes"] = i
+            return pos
+
+        if before == after:
+            return {"error": "end of scroll reached", "text": text, "swipes": i}
+
+    return {"error": "not found after max swipes", "text": text, "swipes": max_swipes}
+
+
+def scroll_and_tap(text=None, template=None, direction="up", max_swipes=10):
+    found = scroll_until_found(text=text, template=template, direction=direction, max_swipes=max_swipes)
+    if found.get("error"):
+        return found
+
+    screenshot()
+    screen_hash()
+    tap(found["x"], found["y"])
+    found["action"] = "tap"
+    found["screen_changed"] = wait_for_screen_change(timeout=3)
+    return found
 
 
 def smart_wait(text=None, timeout=10):
@@ -291,6 +387,16 @@ def main():
         elif cmd == "wait_text":
             timeout = int(sys.argv[3]) if len(sys.argv) > 3 else 10
             log(smart_wait(text=sys.argv[2], timeout=timeout))
+
+        elif cmd == "scroll_to_text":
+            direction = sys.argv[3] if len(sys.argv) > 3 else "up"
+            max_swipes = int(sys.argv[4]) if len(sys.argv) > 4 else 10
+            log(scroll_until_found(text=sys.argv[2], direction=direction, max_swipes=max_swipes))
+
+        elif cmd == "scroll_and_tap":
+            direction = sys.argv[3] if len(sys.argv) > 3 else "up"
+            max_swipes = int(sys.argv[4]) if len(sys.argv) > 4 else 10
+            log(scroll_and_tap(text=sys.argv[2], direction=direction, max_swipes=max_swipes))
 
         elif cmd == "type":
             log(type_text(sys.argv[2]))

@@ -145,36 +145,40 @@ You interact with the Android app via:
 
 ### Available Commands
 
-| Command                | Description                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| `screenshot`           | Capture current screen state                                                                      |
-| `screenshot_grid [N]`  | Screenshot with coordinate grid every N px (default 100) — use when `tap x y` precision is needed |
-| `ui_tree`              | Dump the full XML UI hierarchy                                                                    |
-| `tap x y`              | Tap at absolute coordinates                                                                       |
-| `tap_text "text"`      | Tap an element by its visible text                                                                |
-| `type_text "text"`     | Type text into a focused input field                                                              |
-| `swipe direction`      | Swipe in a direction (up/down/left/right)                                                         |
-| `key keycode`          | Send a key event (e.g., BACK, ENTER)                                                              |
-| `wait_for_text "text"` | Block until text appears on screen                                                                |
+| Command                   | Description                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `screenshot`              | Capture current screen state (saved to `/tmp/screen.png`)                         |
+| `tap_text "text"`         | Tap an element by its visible text (OCR on screenshot + screen-change validation) |
+| `tap_template path`       | Tap by matching a template image (icons, logos)                                   |
+| `tap_xy x y`              | Tap at absolute coordinates                                                       |
+| `tap_percent px py`       | Tap at relative coordinates (0.0–1.0 of screen width/height)                      |
+| `type "text"`             | Type text into the currently focused input                                        |
+| `swipe direction`         | Swipe `up` / `down` / `left` / `right`                                            |
+| `wait_text "text" [secs]` | Block until text appears on screen (default 10s)                                  |
+| `scroll_to_text "text" [direction] [max_swipes]` | Scroll repeatedly until the text appears (like Maestro's `scrollUntilVisible`). Default `direction=up` (reveals content below), `max_swipes=10`. Stops early when the screen stops changing (end of list) |
+| `scroll_and_tap "text" [direction] [max_swipes]` | Same as `scroll_to_text` but taps the element once found                          |
+
+Every command returns a JSON line on stdout. `tap_text` returns `screen_changed: true/false` — if `false`, the tap hit the target but the UI did not react (likely wrong element, disabled button, or overlay).
 
 ### WebView Limitation
 
-Eitri apps run inside an Android **WebView**. Because of this, `ui_tree` will **not** expose any of the Eitri app's UI elements — the XML hierarchy only reflects the native Android shell (WebView container, status bar, etc.), not the HTML/React content rendered inside it.
+Eitri apps render inside an Android **WebView**, so the native UI hierarchy does **not** contain the app's React/HTML content. There is no `ui_tree` command exposed by this tool, and any XML-based inspection would be useless for Eitri content anyway.
 
 **Rules for Eitri app interaction:**
 
-- **Primary observation tool:** `screenshot` — this is the only reliable way to see the app's current state
-- **`ui_tree` is useless for Eitri content** — do not rely on it to find elements inside the app
-- **`tap_text` still works** — ADB text matching operates over the rendered screen, not the XML tree
-- **`wait_for_text` still works** — same reason as above
-- **`tap x y`** — use as a fallback when `tap_text` cannot find the target; **always use `screenshot_grid` first** to read exact coordinates from the grid labels — never estimate from a plain screenshot
+- **Primary observation tool:** `screenshot` — the only reliable way to see the app's current state.
+- **`tap_text` works over the rendered pixels** (OCR + template fallback), so it does find WebView content.
+- **`wait_text` works** for the same reason — use it for elements that appear after loading/animation.
+- **`tap_xy` / `tap_percent`** — fallback when `tap_text` cannot locate the target. Read coordinates from a fresh `screenshot`; never estimate from memory of a previous screen.
+- **`tap_template`** — use for icons or non-textual targets (save a reference crop under the project and pass its path).
 
 ### Usage Rules
 
-1. **Always observe before acting:** run `screenshot` first (skip `ui_tree` for Eitri apps)
-2. **Prefer text over coordinates:** use `tap_text` instead of `tap x y`
-3. **Use `wait_for_text` for dynamic elements** that appear after loading
-4. **Validate after every interaction:** re-run `screenshot` to confirm the result
+1. **Always observe before acting:** run `screenshot` first.
+2. **Prefer text over coordinates:** use `tap_text` instead of `tap_xy`.
+3. **Check `screen_changed`** in the `tap_text` response — if `false`, do not assume the action succeeded; re-observe and retry with a different strategy (template, coordinates, or different text).
+4. **Use `wait_text` for dynamic elements** that appear after loading.
+5. **Validate after every interaction:** re-run `screenshot` to confirm the result.
 
 ### App Startup Protocol
 
@@ -198,18 +202,17 @@ ps aux | grep "eitri start"
 
 **Step 2 — If an `eitri start` instance IS running:**
 
-The Eitri dev server is active. Send key events to open the app inside EitriPlay (the Eitri Android development host app):
+The Eitri dev server is active. Tap the workspace entry in EitriPlay (the Eitri Android development host app) to open the app:
 
 ```bash
-# Press 'A' to focus the workspace selector, then ENTER to open the app
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py key A
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py key ENTER
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "YOUR_WORKSPACE_NAME"
 ```
 
 Then wait for the app to load and validate:
 
 ```bash
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_for_text "YOUR_APP_INDICATOR"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_text "YOUR_APP_INDICATOR"
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 ```
 
@@ -228,7 +231,7 @@ Start the dev server first, then proceed with the key events above.
   eitri app start
   ```
 
-After the server starts and the workspace is ready, send the `A` + `ENTER` key events as in Step 2.
+After the server starts and the workspace is ready, follow Step 2 to open the app.
 
 ### Navigation to a Specific Page
 
@@ -243,7 +246,7 @@ When the user asks to work on, inspect, or interact with a specific page/screen,
 # Example: user asks to work on the Cart page
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Cart"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_for_text "My Cart"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_text "My Cart"
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 ```
 
@@ -252,19 +255,19 @@ Never assume the current screen is the target — always verify.
 ### Standard Interaction Flow
 
 ```bash
-# 1. Observe (ui_tree is NOT useful for Eitri apps — WebView hides all content)
+# 1. Observe
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
 
 # 2. Interact (prefer text-based targeting)
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Login"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py type_text "gabriel@email.com"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py type "gabriel@email.com"
 
 # 3. Navigate
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py swipe up
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py key ENTER
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Submit"
 
 # 4. Wait for dynamic content
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_for_text "Welcome"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_text "Welcome"
 
 # 5. Validate
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
