@@ -11,15 +11,35 @@ import cv2
 import numpy as np
 import hashlib
 
-import easyocr
-
-# Inicializa OCR (lazy loading seria possível também)
-reader = easyocr.Reader(['pt', 'en'], gpu=False)
-
 TMP_XML = "/tmp/ui.xml"
 TMP_SCREEN = "/tmp/screen.png"
 
 _last_screen_hash = None
+_reader = None
+_ocr_cache = {}
+_OCR_CACHE_MAX = 8
+
+
+def get_reader():
+    global _reader
+    if _reader is None:
+        import easyocr
+        _reader = easyocr.Reader(['pt', 'en'], gpu=False)
+    return _reader
+
+
+def _cached_readtext(img_path):
+    with open(img_path, "rb") as f:
+        h = hashlib.md5(f.read()).hexdigest()
+
+    if h not in _ocr_cache:
+        img = cv2.imread(img_path)
+        img = preprocess_image(img)
+        _ocr_cache[h] = get_reader().readtext(img)
+        if len(_ocr_cache) > _OCR_CACHE_MAX:
+            _ocr_cache.pop(next(iter(_ocr_cache)))
+
+    return _ocr_cache[h]
 
 
 # ------------------------
@@ -174,10 +194,7 @@ def preprocess_image(img):
 def find_text_ocr(text):
     screenshot()
 
-    img = cv2.imread(TMP_SCREEN)
-    img = preprocess_image(img)
-
-    results = reader.readtext(img)
+    results = _cached_readtext(TMP_SCREEN)
 
     best_match = None
 
