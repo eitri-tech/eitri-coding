@@ -72,12 +72,79 @@ Use this as the default substitution table. When in doubt about a prop or an exa
 | Device chrome (`IOSDevice`, `AndroidDevice`, status bars, notches, home indicators) | **Delete.** Never migrated.                                  |
 | Canvas (`DesignCanvas`, `DCSection`, `DCArtboard`)    | **Delete.** Each `DCArtboard` becomes a separate file under `src/views/...`.           |
 
-### Color tokens
+### Color tokens & Tailwind theme
 
 If the source defines a palette object (e.g. `const LOOP = { blue: '#1E5BFF', ... }`):
 
-- Either inline the hex values via Tailwind arbitrary classes (`bg-[#1E5BFF]`) — fine for one-offs.
-- Or, preferred for repeated tokens, point the user to configure these as DaisyUI theme tokens in the Eitri Developer Console (same place as fonts, see below). After that, use semantic classes like `bg-primary`, `text-base-content`, etc.
+- For a one-off color, inline it via a Tailwind arbitrary class (`bg-[#1E5BFF]`) — fine.
+- For **any palette that is reused** (brand colors, semantic states, neutrals, custom font families), do **not** edit a local `tailwind.config.js`. Eitri Luminus v2 reads its Tailwind / DaisyUI theme from a JSON configured at **Eitri Console → Design System → Luminus V2.x**, and every Eitri-App on Luminus v2 inherits it. You must hand the user a complete, ready-to-paste JSON with the design's tokens mapped onto the **default theme name `eitri`**.
+
+#### How to deliver the theme JSON
+
+When the migrated design needs custom colors and/or fonts, output a single JSON block following this exact structure (this is the format the Eitri Developer Console expects):
+
+- `daisyui.themes[0].eitri` — the main DaisyUI theme. The theme key **must be `eitri`** and `defaultTheme` **must be `"eitri"`**, since this is the name every Luminus v2 app inherits.
+- Always include the full DaisyUI semantic set: `primary`, `primary-content`, `secondary`, `secondary-content`, `accent`, `accent-content`, `neutral`, `neutral-content`, `base-100`, `base-200`, `base-300`, `base-content`, `info`, `info-content`, `success`, `success-content`, `warning`, `warning-content`, `error`, `error-content`. Map the design's palette onto these slots — pick sensible defaults for any slot the design didn't explicitly define (don't leave a slot out).
+- `theme.extend.colors` — extra named colors from the design that don't fit DaisyUI semantics (custom neutrals, brand-specific shades, etc.). Use Tailwind-style names (`neutral-500`, `brand-blue`, `yellow-800`, …).
+- `theme.extend.fontFamily` — the fonts used in the design, in Tailwind format. These pair with the Google Fonts `@import` shipped via the Theme CSS (see *Final hand-off*).
+- `darkTheme: false` unless the design is explicitly dark.
+
+Reference shape (this is the literal format shown in the Eitri Developer Console — keep it 1:1):
+
+```json
+{
+  "daisyui": {
+    "themes": [
+      {
+        "eitri": {
+          "primary": "#FF77AA",
+          "primary-content": "#000000",
+          "secondary": "#220022",
+          "secondary-content": "#ffffff",
+          "accent": "#2dbe89",
+          "accent-content": "#000000",
+          "neutral": "#fafafa",
+          "neutral-content": "#000000",
+          "base-100": "#FEFCFB",
+          "base-200": "#35323e",
+          "base-300": "#484554",
+          "base-content": "#e4e3e8",
+          "info": "#306ee8",
+          "info-content": "#ffffff",
+          "success": "#22c322",
+          "success-content": "#000000",
+          "warning": "#eebd2b",
+          "warning-content": "#000000",
+          "error": "#df2020",
+          "error-content": "#ffffff"
+        }
+      }
+    ],
+    "defaultTheme": "eitri",
+    "darkTheme": false
+  },
+  "theme": {
+    "extend": {
+      "colors": {
+        "neutral-100": "#f5f5f5",
+        "neutral-500": "#737373",
+        "neutral-900": "#171717",
+        "brand-blue": "#1E5BFF"
+      },
+      "fontFamily": {
+        "inter": ["Inter", "sans-serif"],
+        "garamond": ["EB Garamond", "serif"]
+      }
+    }
+  }
+}
+```
+
+After producing the JSON, tell the user:
+
+> Open **Eitri Console → Design System → Luminus V2.x** and paste this JSON. The theme is named `eitri` and is set as default, so every Luminus v2 app in your workspace will inherit it automatically. Use `bg-primary`, `text-primary-content`, `bg-base-100`, etc. in the migrated components instead of inline hex values.
+
+Once the theme JSON is in place, **prefer DaisyUI semantic classes** (`bg-primary`, `text-base-content`, `bg-base-200`) over arbitrary hex classes inside the migrated components — that way a future re-skin only changes the JSON, not the code.
 
 ---
 
@@ -151,7 +218,7 @@ Never guess component names.
 
 ### 6. Final hand-off — fonts & theme
 
-If the source design uses **specific fonts** (Inter, Fragment Mono, EB Garamond, etc.), do **not** import them in the migrated component code. Instead, at the end of the migration, instruct the user to configure them in the **Eitri Developer Console**, under the design-system / theme CSS section. Reference:
+If the source design uses **specific fonts** (Inter, Fragment Mono, EB Garamond, etc.), do **not** import them in the migrated component code. Instead, at the end of the migration, instruct the user to paste the font CSS at **Eitri Console → Design System → Luminus V1.x** (the V1.x section is where the Theme CSS / `@import` font block lives — even for projects on Luminus v2, fonts go through V1.x). Reference:
 
 > https://docs.eitri.tech/en/concepts/design-system/#theme
 
@@ -168,9 +235,14 @@ body {
 
 Tell the user, in plain text:
 
-> The migrated code does not import fonts directly. Open the Eitri Developer Console → Design System → Theme CSS, and paste the snippet above (already tailored to the fonts used in your design). The `body { font-family: ... }` rule will cascade through every Luminus component.
+> The migrated code does not import fonts directly. Open **Eitri Console → Design System → Luminus V1.x** and paste the CSS snippet above (already tailored to the fonts used in your design). The `body { font-family: ... }` rule will cascade through every Luminus component.
 
-If the source used DaisyUI semantic colors / a custom theme, mention that DaisyUI theme tokens can be defined in the same Theme CSS area.
+If the source used DaisyUI semantic colors / a custom theme, also output the full Tailwind / DaisyUI theme JSON described in *Color tokens & Tailwind theme* above (theme key `eitri`, set as default) and tell the user to paste it at **Eitri Console → Design System → Luminus V2.x**. So:
+
+- **Fonts (CSS `@import` + `body`)** → Eitri Console → Design System → **Luminus V1.x**
+- **Colors / Tailwind / DaisyUI JSON** → Eitri Console → Design System → **Luminus V2.x**
+
+Both live in the Eitri Console — never edit a local `tailwind.config.js`.
 
 ---
 
@@ -186,6 +258,7 @@ Before reporting the migration complete, verify:
 - [ ] Each screen is at `src/views/.../<Name>.tsx` (or `.jsx`, matching project convention).
 - [ ] Shared primitives extracted to `src/components/`.
 - [ ] User has been given the font / theme CSS snippet and pointed to the Eitri Developer Console.
+- [ ] If the design has custom colors or fonts, the full Tailwind / DaisyUI theme JSON has been delivered with `defaultTheme: "eitri"` and the theme key named `eitri`.
 
 ---
 
