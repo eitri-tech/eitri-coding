@@ -1,10 +1,27 @@
 ---
 name: eitri-coding
-description: A skill for developing apps with Eitri (Luminus + Bifrost) and interacting with Android devices via ADB.
+description: A skill for developing apps with Eitri (Luminus + Bifrost) and interacting with Android devices via ADB. ALWAYS invoke this skill whenever the project root contains an `app-config.yaml` or `eitri-app.conf.js` file — both are definitive signals that the working directory is an Eitri project, and any front-end / app-development work in such a project must follow this skill's rules.
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Agent
 ---
 
 # SKILL.md — Eitri Expert Front-End Developer
+
+## When to use this skill
+
+Auto-invoke this skill any time you detect that the current project is an Eitri project. The two definitive signals — check at the start of any task — are:
+
+- **`eitri-app.conf.js`** at the project root → standard single Eitri-App.
+- **`app-config.yaml`** at the project root → multi-app Eitri workspace (start the dev server with `eitri app start` instead of `eitri start`).
+
+If either file is present, treat *all* front-end / coding / app-interaction work in the directory as Eitri work and apply every rule below (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, ADB interaction protocol, etc.). Do not wait for the user to ask explicitly — the presence of these files is enough.
+
+A quick check at task start:
+
+```bash
+ls eitri-app.conf.js app-config.yaml 2>/dev/null
+```
+
+---
 
 ## Agent Role
 
