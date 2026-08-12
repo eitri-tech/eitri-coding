@@ -350,7 +350,7 @@ python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills
 
 # 2. Interact (prefer text-based targeting)
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Login"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py type "gabriel@email.com"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py type "user@example.com"
 
 # 3. Navigate
 python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py swipe up

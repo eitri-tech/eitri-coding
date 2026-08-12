@@ -3,6 +3,10 @@
   "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost and interacts with Android devices via ADB",
   "version": "1.4.0",
   "author": {
-    "name": "Gabriel Fonseca"
-  }
+    "name": "Eitri",
+    "url": "https://eitri.tech"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://eitri.tech",
+  "repository": "https://github.com/eitri-tech/eitri-coding"
 }

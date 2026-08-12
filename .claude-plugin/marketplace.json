@@ -1,7 +1,8 @@
 {
   "name": "eitri-plugins",
   "owner": {
-    "name": "Gabriel Fonseca"
+    "name": "Eitri",
+    "url": "https://eitri.tech"
   },
   "plugins": [
     {
