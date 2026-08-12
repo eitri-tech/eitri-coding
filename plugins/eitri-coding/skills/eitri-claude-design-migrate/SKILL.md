@@ -34,7 +34,7 @@ Produce idiomatic Eitri (Luminus) source files that:
 
 ---
 
-## Mandatory rules (inherited from `eitri-coding`)
+## Mandatory rules (inherited from `eitri-specialist`)
 
 - **No HTML tags.** `div`, `span`, `p`, `img`, `button`, `input`, `a`, `h1`–`h6`, `ul`, `li`, `section`, `header`, `footer`, `nav`, `svg` *containers*, etc. are forbidden. Always use `eitri-luminus` equivalents.
 - **No `hover:`, `focus:`, `focus-within:`, `active:` Tailwind utilities** — they get stuck on mobile touchscreens.

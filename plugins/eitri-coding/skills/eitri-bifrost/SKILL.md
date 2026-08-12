@@ -18,7 +18,7 @@ Trigger automatically when any of these are true:
 - A code review involves Bifrost correctness (`await` on async APIs, `canIUse` capability checks, permission flow before sensors, no use of forbidden web primitives).
 - The user explicitly mentions Bifrost, native bridge, EitriPlay capabilities, modules metadata, or "is this API available?".
 
-This skill **complements** `eitri-coding` (project-level rules) and `eitri-luminus` (UI library reference). UI questions go to `eitri-luminus`; native capability questions go here.
+This skill **complements** `eitri-specialist` (project-level rules) and `eitri-luminus` (UI library reference). UI questions go to `eitri-luminus`; native capability questions go here.
 
 ---
 

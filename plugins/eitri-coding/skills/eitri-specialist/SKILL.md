@@ -1,25 +1,36 @@
 ---
-name: eitri-coding
-description: A skill for developing apps with Eitri (Luminus + Bifrost) and interacting with Android devices via ADB. ALWAYS invoke this skill whenever the project root contains an `app-config.yaml` or `eitri-app.conf.js` file — both are definitive signals that the working directory is an Eitri project, and any front-end / app-development work in such a project must follow this skill's rules.
+name: eitri-specialist
+description: Eitri Specialist — expert at developing apps and Eitri-Apps with Eitri (Luminus + Bifrost), plus interacting with Android devices via ADB. MANDATORY, NON-NEGOTIABLE trigger — invoke this skill BEFORE any other action whenever an `eitri-app.conf.js` or `app-config.yaml` file exists anywhere in the working directory tree (project root or an immediate subdirectory), or whenever the repo imports `eitri-bifrost` / `eitri-luminus`, contains `src/views/`, or the user mentions Eitri, Eitri-App, Eitri-Play, Forge, Luminus or Bifrost. These files are definitive proof the working directory is an Eitri project; every front-end, coding, build, run or device-interaction task in such a project MUST follow this skill's rules, even if the user never says the word "Eitri".
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Agent
 ---
 
-# SKILL.md — Eitri Expert Front-End Developer
+# SKILL.md — Eitri Specialist
 
-## When to use this skill
+## When to use this skill (mandatory detection)
 
-Auto-invoke this skill any time you detect that the current project is an Eitri project. The two definitive signals — check at the start of any task — are:
-
-- **`eitri-app.conf.js`** at the project root → standard single Eitri-App.
-- **`app-config.yaml`** at the project root → multi-app Eitri workspace (start the dev server with `eitri app start` instead of `eitri start`).
-
-If either file is present, treat *all* front-end / coding / app-interaction work in the directory as Eitri work and apply every rule below (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, ADB interaction protocol, etc.). Do not wait for the user to ask explicitly — the presence of these files is enough.
-
-A quick check at task start:
+**Before doing anything else in a new working directory, run the detection check.** This is not optional and does not depend on the user asking for Eitri.
 
 ```bash
-ls eitri-app.conf.js app-config.yaml 2>/dev/null
+ls eitri-app.conf.js app-config.yaml 2>/dev/null; \
+find . -maxdepth 2 \( -name eitri-app.conf.js -o -name app-config.yaml \) \
+  -not -path '*/node_modules/*' 2>/dev/null
 ```
+
+Definitive signals — **any one of them is enough**:
+
+- **`eitri-app.conf.js`** → standard single Eitri-App.
+- **`app-config.yaml`** → multi-app Eitri workspace (start the dev server with `eitri app start` instead of `eitri start`).
+
+Supporting signals (treat as Eitri unless the definitive check clearly says otherwise): `eitri-bifrost` or `eitri-luminus` in `package.json`, a `src/views/` directory, imports of `Eitri.*`, or the user mentioning Eitri / Eitri-App / Eitri-Play / Forge / Luminus / Bifrost.
+
+**If detected:**
+
+1. Treat *all* front-end / coding / build / run / device-interaction work in that directory as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
+2. Apply every rule below without exception (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, ADB interaction protocol, etc.).
+3. Never fall back to generic React / web / React Native practice, even when the user's request sounds generic ("add a button", "fix this screen", "run the app"). Generic advice in an Eitri project is a bug.
+4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
+
+Do not wait for the user to ask explicitly — the presence of these files is enough.
 
 ---
 
@@ -157,7 +168,7 @@ export default function ProductList({ id, name }) { ... }
 You interact with the Android app via:
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py
+~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py
 ```
 
 ### Available Commands
@@ -222,15 +233,15 @@ ps aux | grep "eitri start"
 The Eitri dev server is active. Tap the workspace entry in EitriPlay (the Eitri Android development host app) to open the app:
 
 ```bash
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "YOUR_WORKSPACE_NAME"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "YOUR_WORKSPACE_NAME"
 ```
 
 Then wait for the app to load and validate:
 
 ```bash
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_text "YOUR_APP_INDICATOR"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py wait_text "YOUR_APP_INDICATOR"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
 ```
 
 **Step 3 — If NO `eitri start` instance is running:**
@@ -261,10 +272,10 @@ When the user asks to work on, inspect, or interact with a specific page/screen,
 
 ```bash
 # Example: user asks to work on the Cart page
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Cart"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_text "My Cart"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Cart"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py wait_text "My Cart"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
 ```
 
 Never assume the current screen is the target — always verify.
@@ -273,21 +284,21 @@ Never assume the current screen is the target — always verify.
 
 ```bash
 # 1. Observe
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
 
 # 2. Interact (prefer text-based targeting)
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Login"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py type "gabriel@email.com"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Login"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py type "gabriel@email.com"
 
 # 3. Navigate
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py swipe up
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py tap_text "Submit"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py swipe up
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Submit"
 
 # 4. Wait for dynamic content
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py wait_text "Welcome"
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py wait_text "Welcome"
 
 # 5. Validate
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-coding/tools/android.py screenshot
+python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
 ```
 
 ---

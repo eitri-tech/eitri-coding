@@ -18,7 +18,7 @@ Trigger automatically when any of these are true:
 - A code review involves Luminus correctness (no raw HTML, valid component names, sizing via props, etc.).
 - The user explicitly mentions Luminus, Forge, or Eitri-Play in a UI context.
 
-This skill **complements** `eitri-coding` (which governs the whole Eitri project) and `eitri-claude-design-migrate` (which handles Claude Design ports). When all three could apply, follow `eitri-coding` for project-wide rules and use this skill as the component reference.
+This skill **complements** `eitri-specialist` (which governs the whole Eitri project) and `eitri-claude-design-migrate` (which handles Claude Design ports). When all three could apply, follow `eitri-specialist` for project-wide rules and use this skill as the component reference.
 
 ---
 
@@ -61,7 +61,7 @@ Forge transforms the React/Tailwind source into a native mobile interface — so
    ```
 4. **Styling uses `className` with Tailwind / DaisyUI utilities.** Do not write raw `style={{}}` unless a Tailwind utility truly cannot express it.
 5. **Text always lives inside `<Text>`** (or a component that itself renders text, like `Button`). Never put bare strings inside layout components like `View` directly when avoidable.
-6. **Pages are routed file-based** under `src/views/` (governed by `eitri-coding`); each page wraps its content in `<Page>`.
+6. **Pages are routed file-based** under `src/views/` (governed by `eitri-specialist`); each page wraps its content in `<Page>`.
 
 If a user-supplied snippet violates any of these, fix it as part of the answer.
 
@@ -125,7 +125,7 @@ Categories and component names mirror the official docs. Use this as a quick loo
 | `<input type="text">` | `<TextInput>` |
 | `<textarea>` | `<Textarea>` |
 | `<select>` | `<Select>` |
-| `<a>` (in-app navigation) | Bifrost navigation API (see `eitri-coding`) — not an HTML anchor |
+| `<a>` (in-app navigation) | Bifrost navigation API (see `eitri-specialist`) — not an HTML anchor |
 | `<ul>` / `<ol>` + `<li>` | `<List>` or `<View>` + mapped `<View>`/`<Text>` rows |
 | `<hr>` | `<Divider>` |
 | `<section>` / `<header>` / `<footer>` | `<View>` with semantic className |

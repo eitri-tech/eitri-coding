@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_EVENT=SessionStart bash \"${CLAUDE_PLUGIN_ROOT}/hooks/detect-eitri-project.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

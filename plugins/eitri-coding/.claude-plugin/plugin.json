@@ -1,7 +1,7 @@
 {
   "name": "eitri-coding",
-  "description": "Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and interacts with Android devices via ADB",
-  "version": "1.3.0",
+  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost and interacts with Android devices via ADB",
+  "version": "1.4.0",
   "author": {
     "name": "Gabriel Fonseca"
   }
