@@ -365,6 +365,44 @@ python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills
 
 ---
 
+## iOS Simulator Interaction (macOS only)
+
+`tools/ios.py` mirrors `android.py`'s command surface for the iOS Simulator. Same commands, same JSON output, same Eitri-domain classification — only the plumbing differs, and the injected JavaScript is literally the same code (both tools share `tools/webinspect.py`).
+
+```
+~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/ios.py
+```
+
+**Setup (once):**
+
+```bash
+brew install idb-companion ios-webkit-debug-proxy
+pip install fb-idb
+python3 .../ios.py doctor      # verifies every layer and prints what is missing
+```
+
+**Always start with `doctor`.** It reports the booted simulator, the binaries, the `webinspectord_sim` socket, the proxy state and how many inspectable pages exist — with a `hints` list telling you exactly what to fix.
+
+| Layer | Android | iOS |
+| ----- | ------- | --- |
+| Screenshot / launch / deeplink | `adb` | `xcrun simctl io booted screenshot`, `simctl launch`, `simctl openurl` |
+| Tap / swipe / type | `adb shell input` | `idb ui tap / swipe / text` |
+| Native tree (tab bar, alerts) | `uiautomator dump` (XML) | `idb ui describe-all` (accessibility tree) |
+| Debug bridge | `adb forward` on the abstract socket | `ios_webkit_debug_proxy` on the launchd unix socket |
+| Protocol | Chrome DevTools Protocol | WebKit Inspector |
+
+**iOS-only commands:** `doctor`, `device`, `launch <bundle-id> [--relaunch]`, `openurl <url>`, `button <HOME|LOCK|SIDE_BUTTON|SIRI>`, `ax_tree`, `proxy_start`, `proxy_stop`. Everything else (`screenshot`, `tap_text`, `wait_text`, `tap_xy`, `tap_percent`, `type`, `swipe`, `back`, `tabs`, `switch_tab`, and every `webview_*`) works exactly as documented above for Android.
+
+Three differences that matter when reading output:
+
+- **Coordinates are POINTS, not pixels.** `idb` taps in points while screenshots are in pixels, so `webview_dom` / `webview_find` report `units: "points"` and `screenshot` returns a `scale` (pixels per point, typically 2 or 3). Multiply by `scale` before comparing a box against a screenshot.
+- **`back` is an edge swipe** — iOS has no back button.
+- **`tap_text` uses accessibility labels**, not OCR, so it only finds native chrome (tab bar, alerts, system dialogs). For anything inside the Eitri-App, use `webview_find` → `webview_tap`.
+
+**Requirement:** since iOS 16.4 the host app must set `webView.isInspectable = true` for the WKWebView to appear in the inspector — the analogue of Android's `setWebContentsDebuggingEnabled`. Without it, `webview_targets` returns empty (and `doctor` says so explicitly) while all native commands keep working.
+
+---
+
 ## Tool Usage Guidelines
 
 - **`Read` / `Grep` / `Glob`:** Explore the project structure before writing or editing any file
