@@ -55,6 +55,7 @@ plugins/eitri-coding/
     eitri-specialist/            # Entry point: project rules, routing, runtime safety
     eitri-luminus/               # Luminus UI component reference
     eitri-bifrost/               # Bifrost native API reference
+    eitri-shopping/                # Eitri Shopping bundles (multi-app e-commerce)
     eitri-claude-design-migrate/ # Claude Design → Eitri porting
     eitri-device/                # Device & simulator automation
       tools/

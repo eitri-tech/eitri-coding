@@ -32,7 +32,7 @@ Supporting signals (treat as Eitri unless the definitive check clearly says othe
 1. Treat *all* front-end / coding / build / run / device-interaction work in that app as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
 2. Apply every rule below without exception (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, runtime safety, etc.).
 3. Never fall back to generic React / web / React Native practice, even when the user's request sounds generic ("add a button", "fix this screen", "run the app"). Generic advice in an Eitri project is a bug.
-4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
+4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-shopping` whenever the repo is an Eitri Shopping bundle (multi-app e-commerce: home/pdp/cart/checkout/account + shared), `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
 
 Do not wait for the user to ask explicitly — for coding work, the presence of these files is enough.
 
