@@ -1,6 +1,6 @@
 ---
 name: eitri-specialist
-description: Eitri Specialist — expert at developing apps and Eitri-Apps with Eitri (Luminus + Bifrost), plus interacting with Android devices via ADB. MANDATORY, NON-NEGOTIABLE trigger — invoke this skill BEFORE any other action whenever an `eitri-app.conf.js` or `app-config.yaml` file exists anywhere in the working directory tree (project root or an immediate subdirectory), or whenever the repo imports `eitri-bifrost` / `eitri-luminus`, contains `src/views/`, or the user mentions Eitri, Eitri-App, Eitri-Play, Forge, Luminus or Bifrost. These files are definitive proof the working directory is an Eitri project; every front-end, coding, build, run or device-interaction task in such a project MUST follow this skill's rules, even if the user never says the word "Eitri".
+description: Eitri Specialist — expert at developing apps and Eitri-Apps with Eitri (Luminus + Bifrost). MANDATORY, NON-NEGOTIABLE trigger for any task that writes, edits, reviews, debugs, runs, builds or deploys code — invoke it BEFORE touching the code whenever an `eitri-app.conf.js` or `app-config.yaml` file exists in the working directory tree (project root or an immediate subdirectory), or whenever the repo imports `eitri-bifrost` / `eitri-luminus`, contains `src/views/`, or the user mentions Eitri, Eitri-App, Eitri-Play, Forge, Luminus or Bifrost. Those files are definitive proof the directory is an Eitri project, and such work MUST follow this skill's rules even if the user never says the word "Eitri". Do NOT invoke it for questions unrelated to the app's code that merely happen to be asked from inside an Eitri directory (git history, shell commands, general concepts) — answer those normally.
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Agent
 ---
 
@@ -8,7 +8,9 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Agent
 
 ## When to use this skill (mandatory detection)
 
-**Before doing anything else in a new working directory, run the detection check.** This is not optional and does not depend on the user asking for Eitri.
+**Scope first: this skill governs *work on the code and the app*** — implementing, editing, reviewing, debugging, running, building or deploying, and anything that touches a device. It is not meant for unrelated questions that happen to be asked from inside an Eitri directory (git history, a shell command, a general concept). Answer those normally; do not run the detection, do not load these rules.
+
+**When the task is that kind of work, run the detection check before anything else.** It is not optional and does not depend on the user saying the word "Eitri".
 
 ```bash
 ls eitri-app.conf.js app-config.yaml 2>/dev/null; \
@@ -23,14 +25,16 @@ Definitive signals — **any one of them is enough**:
 
 Supporting signals (treat as Eitri unless the definitive check clearly says otherwise): `eitri-bifrost` or `eitri-luminus` in `package.json`, a `src/views/` directory, imports of `Eitri.*`, or the user mentioning Eitri / Eitri-App / Eitri-Play / Forge / Luminus / Bifrost.
 
+**Which app, when the match is nested.** A hit under a subdirectory means the Eitri app is *there*, not at the root — a monorepo may hold several, plus unrelated packages. Run Eitri commands from the app's own directory, and when more than one could be meant, ask instead of guessing. The rules below apply to work inside the Eitri app(s), not to every package in the repo.
+
 **If detected:**
 
-1. Treat *all* front-end / coding / build / run / device-interaction work in that directory as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
-2. Apply every rule below without exception (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, ADB interaction protocol, etc.).
+1. Treat *all* front-end / coding / build / run / device-interaction work in that app as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
+2. Apply every rule below without exception (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, runtime safety, etc.).
 3. Never fall back to generic React / web / React Native practice, even when the user's request sounds generic ("add a button", "fix this screen", "run the app"). Generic advice in an Eitri project is a bug.
-4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
+4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
 
-Do not wait for the user to ask explicitly — the presence of these files is enough.
+Do not wait for the user to ask explicitly — for coding work, the presence of these files is enough.
 
 ---
 
@@ -161,246 +165,76 @@ export default const ProductList = (props) => { ... }
 export default function ProductList({ id, name }) { ... }
 ```
 
----
+### Runtime Safety (applies to every request, always)
 
-## Android Interaction (ADB via Python)
+Eitri-Apps run inside a WebView: a `TypeError` does not surface as a build error, it blanks the screen on the user's phone. There is no type checker or linter between your code and production, so **every piece of code you write or edit must be defensive by default** — this is not optional and does not depend on the user asking for it.
 
-You interact with the Android app via:
+Guard against, at minimum:
 
-```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py
-```
+- **Property access on `undefined` / `null`:** never chain into data you did not create in the same function — `props.match.params` and `props.location.state` included, both `undefined` when the view is opened without parameters. Guard the access, but do not write a blind cascade (`a?.b?.c?.d`): the deeper the chain, the more it hides *which* level was missing. Normalize the shape once at the entry point and read a flat value from there.
+- **Calling something that may not be a function:** callbacks coming from props, Bifrost handlers, or optional service methods — `typeof onSelect === 'function' && onSelect(item)`.
+- **Iterating a non-array:** API responses are not contracts. `(items ?? []).map(...)`, and check `Array.isArray(x)` before `.map` / `.filter` / `.length` when the shape comes from the network.
+- **Async that can reject:** every `Eitri.http` / `fetch`-like call and every Bifrost native call goes inside `try/catch` with a real fallback state (empty list, error message), never a silent `catch {}`.
+- **Unavailable native capability:** guard Bifrost APIs with `Eitri.canIUse(...)` before calling them — an older Eitri-Play build simply does not have the method.
+- **Values used in rendering:** numbers/strings that feed formatting (`toFixed`, `toLowerCase`, `dayjs(...)`, currency helpers) must be validated first — formatting `undefined` throws and takes the whole screen down.
+- **Loading vs. empty vs. error:** never render a view that assumes data has already arrived. Model the three states explicitly.
 
-### Available Commands
+#### What actually crashes in production
 
-| Command                   | Description                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| `screenshot`              | Capture current screen state (saved to `/tmp/screen.png`)                         |
-| `tap_text "text"`         | Tap an element by its visible text (OCR on screenshot + screen-change validation) |
-| `tap_template path`       | Tap by matching a template image (icons, logos)                                   |
-| `tap_xy x y`              | Tap at absolute coordinates                                                       |
-| `tap_percent px py`       | Tap at relative coordinates (0.0–1.0 of screen width/height)                      |
-| `type "text"`             | Type text into the currently focused input                                        |
-| `swipe direction`         | Swipe `up` / `down` / `left` / `right`                                            |
-| `back`                    | Native back button (`KEYCODE_BACK`) — returns `screen_changed`                    |
-| `wait_text "text" [secs]` | Block until text appears on screen (default 10s)                                  |
-| `scroll_to_text "text" [direction] [max_swipes]` | Scroll repeatedly until the text appears (like Maestro's `scrollUntilVisible`). Default `direction=up` (reveals content below), `max_swipes=10`. Stops early when the screen stops changing (end of list) |
-| `scroll_and_tap "text" [direction] [max_swipes]` | Same as `scroll_to_text` but taps the element once found                          |
+Error dumps from real Eitri-Apps are overwhelmingly dominated by **one failure mode: null remote data**. `Cannot read properties of null (reading 'X')` accounts for the large majority of production crashes, and it spikes whenever a backend changes payload shape. Any screen that consumes API or CMS data is exposed. Weight your review accordingly.
 
-Every command returns a JSON line on stdout. `tap_text` returns `screen_changed: true/false` — if `false`, the tap hit the target but the UI did not react (likely wrong element, disabled button, or overlay).
+In order of observed frequency:
 
-### WebView Inspection (Chrome DevTools Protocol)
+- **A nested iteration callback assuming a populated field — by far the most common.** `list.find(x => x.tags.some(...))` where `x.tags` came back `null`. Any `.some` / `.find` / `.filter` / `.includes` **inside** a `.map` / `.find` / `.forEach` is the prime suspect.
+- **`.map` over a nested field:** `data.items.map(...)` with an optional `items`.
+- String methods on optional text (`.replace`, `.split`, `.trim`, `.toLowerCase`) — APIs return `null`, not `""`.
+- Nested domain objects (`address.street`, `item.offer.price`, `product.images[0].url`) — every intermediate level fails.
+- Unstable field types (`values.join is not a function`) — array sometimes, string other times. `Array.isArray` first.
 
-Eitri-Apps render inside an Android **WebView**, so the native UI hierarchy (`uiautomator`) is useless for app content — it shows a single opaque `WebView` node. Instead, inspect the **live DOM** through the WebView's DevTools endpoint: the tool forwards `@webview_devtools_remote_<pid>` with `adb forward` and speaks CDP over a built-in WebSocket client (no extra Python packages).
+Rules that follow from this:
 
-This is the WebView equivalent of a `ui_tree`, and it is the **preferred observation tool when debugging generated code** — you see the real rendered markup, the Luminus/DaisyUI classes that were applied, and the actual computed boxes.
+- **Normalize at the entry point, not at the consumer.** `const tags = raw.tags ?? []` once in the service/hook. The same guard repeated across a dozen components *is* the bug, repeated.
+- **`?? []` before iterating, `?.` before descending.**
+- **Never trust the declared type.** Anything that arrived as JSON, crossed an `any`, or came from another package — TypeScript does not validate what came over the network.
+- **`null` ≠ `undefined` ≠ `""` ≠ `[]`.** A default parameter (`= []`) does **not** fire on `null`; only `??` covers it.
+- **One malformed item must not kill the list** — `.filter(Boolean)` and skip it.
 
-| Command                          | Description                                                                                          |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `webview_targets`                | List debuggable WebViews (socket, pid, package, page url/title, `eitri_env`). Start here when unsure. |
-| `webview_foreground`             | Which WebView is actually on screen right now (see *One WebView per Eitri-App* below).               |
-| `webview_dom [selector]`          | **Condensed DOM tree** for the LLM: tag, id, class, text, kept attributes, device-px `box`, `clickable`, `scrollable`, CSS `selector` for interactive nodes. Written to `/tmp/webview_dom.json` when large. |
-| `webview_html [selector]`         | Full `outerHTML` — written to `/tmp/webview.html` (inline only when small). Read/Grep the file.       |
-| `webview_find "text"`            | Locate elements by visible text / `aria-label`; returns CSS selectors + device-px boxes.             |
-| `webview_tap "css-selector"`     | Scroll the element into view, convert its rect to device px (via `devicePixelRatio` + the native WebView offset) and tap it. Returns `screen_changed`. |
-| `webview_eval "js"`              | Evaluate arbitrary JS in the page and return the value (`awaitPromise` enabled).                     |
-| `webview_url`                    | Current `location.href`, `hash`, `title`, `readyState` — the fastest way to confirm the active route. |
-| `webview_console [seconds]`      | Capture `console.*`, `Log.entryAdded` and uncaught exceptions for N seconds (default 5).             |
-| `webview_reload`                 | Hard-reload the page (`ignoreCache`).                                                                |
+A distant second: **device-level formatting failures**. `Internal error. Icu error.` from `Number.toLocaleString` on a broken Android WebView ICU has taken carts down. Wrap `toLocaleString` / `Intl.NumberFormat` / `Intl.DateTimeFormat` in `try/catch` with a plain formatting fallback whenever they sit in a purchase path. This is a device defect, so the fallback is the only defense — and it is the **only** case where wrapping render code in `try/catch` is right.
 
-Shared flags: `--match=<substring>` (pick the page by url/title/package), `--index=N` (pick among matches), `--no-foreground` (skip the on-screen probe), plus `--depth=N` / `--all` (include invisible nodes) for `webview_dom`, `--limit=N` for `webview_find` and `webview_console`, `--errors` for `webview_console`, `--out=path` to change the output file.
+Crashes concentrate on Android WebView. If something depends on a recent browser API, assume an old WebView; iOS being absent from a dump is not evidence it is healthy.
 
-### One WebView per Eitri-App (and the native tab bar)
+When reviewing, order findings by blast radius: purchase path (cart / checkout / PDP) before storefront.
 
-Eitri-Play keeps **every visited Eitri-App alive in its own WebView**, so `webview_targets` normally lists several live pages at once — and each bottom tab is usually a *different Eitri-App* (different UUID in the URL), not a route of the same one. The bottom tab bar itself is **native**, so it is invisible to the DOM and must be tapped through the native layer.
+#### Optional chaining is not the fix — it only moves the failure
 
-Two consequences:
+`?.` stops the exception; it does **not** produce a correct screen. A `product?.price` that resolves to `undefined` renders as *nothing*: the price disappears, the button has no label, the list looks empty — and nobody sees an error, so the bug ships. A blank price is worse than a crash, because it looks like a working screen showing a wrong (free) product.
 
-1. **`document.visibilityState` is useless here** — backgrounded WebViews still report `visible`, `hasFocus()` is `false` everywhere, and `requestAnimationFrame` keeps firing. The reliable signal is that **only the on-screen WebView produces frames**, so `Page.captureScreenshot` answers for it and times out for the others. Every `webview_*` command uses this probe automatically (~10 s) to pick the right page; disable with `--no-foreground` plus an explicit `--match=`.
-2. **To change tabs, use the native path.** `switch_tab "Perfil"` taps the native tab and then re-detects the WebView that came to front, returning its url/title — that is the page all subsequent `webview_*` commands will talk to.
+So for anything that reaches the user's eyes, the guard must decide **what is displayed instead**:
 
-| Command             | Description                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| `tabs`              | List the native bottom-tab entries (label + coordinates) from the UI hierarchy.          |
-| `switch_tab "Name"` | Tap a native tab and report the Eitri-App WebView now in foreground. Falls back to OCR.  |
+- **Never render a bare optional expression.** `{product?.price}` is forbidden. Resolve it to a value first, with an intentional fallback: `const price = product?.price` → then decide.
+- **Choose the fallback by meaning, not by convenience.** `0` for a price is a lie; `'—'`, `'Preço indisponível'` or hiding the whole block are honest. `?? 0` is only correct when zero is genuinely the business value (quantity, count, discount).
+- **Data still loading ≠ data absent.** While loading, show a skeleton/placeholder; when the field is truly missing, show the unavailable state. Both are different from the happy path, and the code must be able to tell them apart — deriving that distinction from `undefined` alone is impossible.
+- **Missing critical data is a state, not a hole.** If the field is essential to the view (price, total, product name, order id), do not render a mutilated card — render an error/unavailable state for that block, and log it (`console.warn`) so it shows up in `webview_console`.
+- **Never let `undefined` / `null` / `NaN` reach the screen as text.** Check formatting results too: `Number(x).toFixed(2)` on garbage yields `"NaN"`, which renders happily.
 
-### Finding tappable elements in Luminus views
+Rule of thumb: for every optional access, answer *"what does the user see when this is missing?"*. If the answer is "nothing, and they can't tell", the guard is wrong.
 
-Eitri views run React (Luminus) inside a WebView, so **there is no `onclick` attribute and usually no `cursor-pointer` class** — a naïve DOM walk finds almost nothing clickable. `webview_dom` therefore reads React's internal props (`__reactProps$*`) off each node and reports `clickable: true` plus the handler names in `handlers` (`onClick`, `onChange`, …), together with a ready-to-use CSS `selector`. Feed that selector straight into `webview_tap`.
-
-**Eitri domains** — used to auto-rank targets and to label `eitri_env`:
-
-- `api.eitri.tech` → `development`
-- `release.eitri.calindra.com.br` → `production`
-- `localhost` / `127.0.0.1` / `192.168.*` / `10.0.2.2` → `local` (dev server from `eitri start` / `eitri app start`)
-
-When several pages are open, the tool picks the highest-ranked Eitri page automatically; override with `--match=api.eitri.tech` or `--match=release.eitri`. Override the whole list with the `EITRI_URL_HINTS` env var.
-
-**Requirements:** device connected (`adb devices`), the Eitri-App in the foreground, and WebView debugging enabled in the host app (`WebView.setWebContentsDebuggingEnabled(true)` — standard in Eitri-Play debug builds). If `webview_targets` returns an empty list, fall back to the pixel-based commands below.
-
-**Debug loop for generated code:**
-
-```bash
-python3 .../android.py webview_url                    # 1. which Eitri-App / route is on screen?
-python3 .../android.py webview_dom "#page"            # 2. what markup did my code actually produce?
-python3 .../android.py webview_console 5 --errors     # 3. runtime errors / failed Bifrost calls
-python3 .../android.py webview_find "Finalizar"       # 4. get a CSS selector for the target
-python3 .../android.py webview_tap "#page > div > button"   # 5. interact precisely
-python3 .../android.py screenshot                     # 6. confirm visually
-```
-
-`webview_console` also **replays the console history** captured before it attached (`Runtime.enable` does the replay), so it shows errors that happened during app boot — not just what occurs during the capture window.
-
-### Pixel-based fallback (no DevTools)
-
-When WebView debugging is unavailable (release builds, DevTools disabled), use the pixel path:
-
-- **Primary observation tool:** `screenshot` — the only reliable way to see the app's current state.
-- **`tap_text` works over the rendered pixels** (OCR + template fallback), so it does find WebView content.
-- **`wait_text` works** for the same reason — use it for elements that appear after loading/animation.
-- **`tap_xy` / `tap_percent`** — fallback when `tap_text` cannot locate the target. Read coordinates from a fresh `screenshot`; never estimate from memory of a previous screen.
-- **`tap_template`** — use for icons or non-textual targets (save a reference crop under the project and pass its path).
-
-### Usage Rules
-
-0. **In an Eitri-App, try `webview_targets` first.** If a debuggable page exists, prefer `webview_dom` / `webview_html` / `webview_console` over OCR — they give the real markup and real errors instead of guesses from pixels. Use `screenshot` alongside it to confirm what the user actually sees.
-1. **Always observe before acting:** run `screenshot` first.
-2. **Prefer text over coordinates:** use `tap_text` instead of `tap_xy`.
-3. **Check `screen_changed`** in the `tap_text` response — if `false`, do not assume the action succeeded; re-observe and retry with a different strategy (template, coordinates, or different text).
-4. **Use `wait_text` for dynamic elements** that appear after loading.
-5. **Validate after every interaction:** re-run `screenshot` to confirm the result.
-
-### App Startup Protocol
-
-Before interacting with the device, check whether the Eitri-App is already open. If the device is connected but no app is visible, follow this decision flow:
-
-**Before Running**
-
-You should grantee the dependêncie of tools for Android interaction is installed:
-
-```bash
-  pip install easyocr opencv-python-headless==4.10.0.84 --break-system-packages
-```
-
-**Step 1 — Check for a running `eitri start` process:**
-
-```bash
-pgrep -a node | grep eitri
-# or
-ps aux | grep "eitri start"
-```
-
-**Step 2 — If an `eitri start` instance IS running:**
-
-The Eitri dev server is active. Tap the workspace entry in EitriPlay (the Eitri Android development host app) to open the app:
-
-```bash
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "YOUR_WORKSPACE_NAME"
-```
-
-Then wait for the app to load and validate:
-
-```bash
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py wait_text "YOUR_APP_INDICATOR"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
-```
-
-**Step 3 — If NO `eitri start` instance is running:**
-
-Start the dev server first, then proceed with the key events above.
-
-- **Single app** (standard `eitri-app.conf.js` present):
-
-  ```bash
-  eitri start
-  ```
-
-- **Multiple apps** (`app-config.yaml` present in the directory):
-  ```bash
-  eitri app start
-  ```
-
-After the server starts and the workspace is ready, follow Step 2 to open the app.
-
-### Navigation to a Specific Page
-
-When the user asks to work on, inspect, or interact with a specific page/screen, navigate to it before doing anything else:
-
-1. Take a `screenshot` to see the current state
-2. If not already on the target page, navigate to it using `tap_text`, `swipe`, or key events as needed
-3. Use `wait_for_text` with a known element from the target page to confirm arrival
-4. Take a final `screenshot` to fully read the screen state before acting
-
-```bash
-# Example: user asks to work on the Cart page
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Cart"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py wait_text "My Cart"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
-```
-
-Never assume the current screen is the target — always verify.
-
-### Standard Interaction Flow
-
-```bash
-# 1. Observe
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
-
-# 2. Interact (prefer text-based targeting)
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Login"
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py type "user@example.com"
-
-# 3. Navigate
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py swipe up
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py tap_text "Submit"
-
-# 4. Wait for dynamic content
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py wait_text "Welcome"
-
-# 5. Validate
-python3 ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/android.py screenshot
-```
+When editing existing code, apply the same standard to the lines you touch. If a defensive check would hide a real bug, prefer an explicit early return with a visible fallback over a silent default — but never leave the unguarded access.
 
 ---
 
-## iOS Simulator Interaction (macOS only)
+## Running & Inspecting the App on a Device
 
-`tools/ios.py` mirrors `android.py`'s command surface for the iOS Simulator. Same commands, same JSON output, same Eitri-domain classification — only the plumbing differs, and the injected JavaScript is literally the same code (both tools share `tools/webinspect.py`).
+Do **not** improvise ADB, `simctl` or screenshot commands, and do not reproduce the device protocol here — it lives in the companion skill **`eitri-device`**.
 
-```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-specialist/tools/ios.py
-```
+**Invoke `eitri-device` before touching a device or simulator**, whenever the task involves: opening/running the Eitri-App, taking a screenshot, tapping/typing/scrolling, switching native tabs, reading the live DOM of the Eitri WebView, capturing runtime console errors, or confirming visually that a change actually renders.
 
-**Setup (once):**
+It covers Android (ADB + Chrome DevTools Protocol via `tools/android.py`) and the iOS Simulator (idb + WebKit Inspector via `tools/ios.py`), plus the startup protocol for `eitri start` / `eitri app start` and EitriPlay.
 
-```bash
-brew install idb-companion ios-webkit-debug-proxy
-pip install fb-idb
-python3 .../ios.py doctor      # verifies every layer and prints what is missing
-```
+Two rules that stay here because they constrain *coding* work, not just automation:
 
-**Always start with `doctor`.** It reports the booted simulator, the binaries, the `webinspectord_sim` socket, the proxy state and how many inspectable pages exist — with a `hints` list telling you exactly what to fix.
-
-| Layer | Android | iOS |
-| ----- | ------- | --- |
-| Screenshot / launch / deeplink | `adb` | `xcrun simctl io booted screenshot`, `simctl launch`, `simctl openurl` |
-| Tap / swipe / type | `adb shell input` | `idb ui tap / swipe / text` |
-| Native tree (tab bar, alerts) | `uiautomator dump` (XML) | `idb ui describe-all` (accessibility tree) |
-| Debug bridge | `adb forward` on the abstract socket | `ios_webkit_debug_proxy` on the launchd unix socket |
-| Protocol | Chrome DevTools Protocol | WebKit Inspector |
-
-**iOS-only commands:** `doctor`, `device`, `launch <bundle-id> [--relaunch]`, `openurl <url>`, `button <HOME|LOCK|SIDE_BUTTON|SIRI>`, `ax_tree`, `proxy_start`, `proxy_stop`. Everything else (`screenshot`, `tap_text`, `wait_text`, `tap_xy`, `tap_percent`, `type`, `swipe`, `back`, `tabs`, `switch_tab`, and every `webview_*`) works exactly as documented above for Android.
-
-Three differences that matter when reading output:
-
-- **Coordinates are POINTS, not pixels.** `idb` taps in points while screenshots are in pixels, so `webview_dom` / `webview_find` report `units: "points"` and `screenshot` returns a `scale` (pixels per point, typically 2 or 3). Multiply by `scale` before comparing a box against a screenshot.
-- **`back` is an edge swipe** — iOS has no back button.
-- **`tap_text` uses accessibility labels**, not OCR, so it only finds native chrome (tab bar, alerts, system dialogs). For anything inside the Eitri-App, use `webview_find` → `webview_tap`.
-
-**Requirement:** since iOS 16.4 the host app must set `webView.isInspectable = true` for the WKWebView to appear in the inspector — the analogue of Android's `setWebContentsDebuggingEnabled`. Without it, `webview_targets` returns empty (and `doctor` says so explicitly) while all native commands keep working.
-
+- **Never claim a UI change works without observing it.** A view that compiles can still render blank — see *Runtime Safety* above.
+- **Never act blind.** Observe the current screen before interacting, and re-observe after.
 ---
 
 ## Tool Usage Guidelines
@@ -409,7 +243,7 @@ Three differences that matter when reading output:
 - **`WebFetch`:** Consult official Eitri docs for component APIs, Bifrost methods, and shared service structures — never guess
 - **`Edit`:** Prefer editing existing files over creating new ones
 - **`Write`:** Use only when creating a new file is strictly necessary
-- **`Bash`:** Run Eitri CLI commands (`eitri start`, `eitri push-version`) and ADB Python scripts
+- **`Bash`:** Run Eitri CLI commands (`eitri start`, `eitri push-version`). For device automation, use `eitri-device` instead of hand-written ADB/simctl calls
 - **`Agent`:** Delegate broad codebase exploration or multi-step research when a simple search is not enough
 
 ---
@@ -417,7 +251,6 @@ Three differences that matter when reading output:
 ## Mindset
 
 - Never act blind — always observe first
-- Always validate screen state before and after interactions
-- Prefer resilient automation: text targets over coordinates
+- Assume the data is missing until proven otherwise; a screen that renders nothing is a bug, not a pass
 - Think like QA + Dev simultaneously
 - Use official boilerplates and documentation as the primary source of truth — never guess dependency names or versions
