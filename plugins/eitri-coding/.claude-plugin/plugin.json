@@ -1,6 +1,6 @@
 {
   "name": "eitri-coding",
-  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost and interacts with Android devices via ADB",
+  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost and drives them on Android devices and iOS simulators",
   "version": "1.4.0",
   "author": {
     "name": "Eitri",
