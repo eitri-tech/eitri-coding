@@ -1,6 +1,6 @@
 ---
 name: eitri-specialist
-description: Eitri Specialist — expert at developing apps and Eitri-Apps with Eitri (Luminus + Bifrost). MANDATORY, NON-NEGOTIABLE trigger for any task that writes, edits, reviews, debugs, runs, builds or deploys code — invoke it BEFORE touching the code whenever an `eitri-app.conf.js` or `app-config.yaml` file exists in the working directory tree (project root or an immediate subdirectory), or whenever the repo imports `eitri-bifrost` / `eitri-luminus`, contains `src/views/`, or the user mentions Eitri, Eitri-App, Eitri-Play, Forge, Luminus or Bifrost. Those files are definitive proof the directory is an Eitri project, and such work MUST follow this skill's rules even if the user never says the word "Eitri". Do NOT invoke it for questions unrelated to the app's code that merely happen to be asked from inside an Eitri directory (git history, shell commands, general concepts) — answer those normally.
+description: Eitri Specialist — expert at developing apps and Eitri-Apps with Eitri (Luminus + Bifrost), plus interacting with Android devices via ADB. MANDATORY, NON-NEGOTIABLE trigger — invoke this skill BEFORE any other action whenever an `eitri-app.conf.js` or `app-config.yaml` file exists anywhere in the working directory tree (project root or an immediate subdirectory), or whenever the repo imports `eitri-bifrost` / `eitri-luminus`, contains `src/views/`, or the user mentions Eitri, Eitri-App, Eitri-Play, Forge, Luminus or Bifrost. These files are definitive proof the working directory is an Eitri project; every front-end, coding, build, run or device-interaction task in such a project MUST follow this skill's rules, even if the user never says the word "Eitri".
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Agent
 ---
 
@@ -8,9 +8,7 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Agent
 
 ## When to use this skill (mandatory detection)
 
-**Scope first: this skill governs *work on the code and the app*** — implementing, editing, reviewing, debugging, running, building or deploying, and anything that touches a device. It is not meant for unrelated questions that happen to be asked from inside an Eitri directory (git history, a shell command, a general concept). Answer those normally; do not run the detection, do not load these rules.
-
-**When the task is that kind of work, run the detection check before anything else.** It is not optional and does not depend on the user saying the word "Eitri".
+**Before doing anything else in a new working directory, run the detection check.** This is not optional and does not depend on the user asking for Eitri.
 
 ```bash
 ls eitri-app.conf.js app-config.yaml 2>/dev/null; \
@@ -25,16 +23,14 @@ Definitive signals — **any one of them is enough**:
 
 Supporting signals (treat as Eitri unless the definitive check clearly says otherwise): `eitri-bifrost` or `eitri-luminus` in `package.json`, a `src/views/` directory, imports of `Eitri.*`, or the user mentioning Eitri / Eitri-App / Eitri-Play / Forge / Luminus / Bifrost.
 
-**Which app, when the match is nested.** A hit under a subdirectory means the Eitri app is *there*, not at the root — a monorepo may hold several, plus unrelated packages. Run Eitri commands from the app's own directory, and when more than one could be meant, ask instead of guessing. The rules below apply to work inside the Eitri app(s), not to every package in the repo.
-
 **If detected:**
 
-1. Treat *all* front-end / coding / build / run / device-interaction work in that app as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
+1. Treat *all* front-end / coding / build / run / device-interaction work in that directory as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
 2. Apply every rule below without exception (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, runtime safety, etc.).
 3. Never fall back to generic React / web / React Native practice, even when the user's request sounds generic ("add a button", "fix this screen", "run the app"). Generic advice in an Eitri project is a bug.
-4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-shopping` whenever the repo is an Eitri Shopping bundle (multi-app e-commerce: home/pdp/cart/checkout/account + shared), `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
+4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-shopping` for commerce integration (VTEX / Wake / Shopify SDKs), `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
 
-Do not wait for the user to ask explicitly — for coding work, the presence of these files is enough.
+Do not wait for the user to ask explicitly — the presence of these files is enough.
 
 ---
 

@@ -1,12 +1,13 @@
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/detect-eitri-project.sh\"",
-            "timeout": 10
+            "command": "HOOK_EVENT=SessionStart bash \"${CLAUDE_PLUGIN_ROOT}/hooks/detect-eitri-project.sh\"",
+            "timeout": 15
           }
         ]
       }
