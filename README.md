@@ -56,6 +56,7 @@ plugins/eitri-coding/
     eitri-luminus/               # Luminus UI component reference
     eitri-bifrost/               # Bifrost native API reference
     eitri-shopping/                # Eitri Shopping bundles (multi-app e-commerce)
+    eitri-typescript-migrate/      # JS→TS migration for an existing Eitri-App workspace
     eitri-claude-design-migrate/ # Claude Design → Eitri porting
     eitri-device/                # Device & simulator automation
       tools/
