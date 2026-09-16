@@ -1,6 +1,6 @@
 ---
 name: eitri-shopping-app-deeplinks
-description: Fetch the Android (`assetlinks.json`) and iOS (`apple-app-site-association`) App Links / Universal Links files for a brand built from the `eitri-shopping-app` app-generator (bitbucket.org/smartsolutionteam/eitri-shopping-app). ALWAYS invoke this skill whenever the user asks for a brand's deeplink files, `assetlinks.json`, `apple-app-site-association`, App Links / Universal Links config, or wants to run `app-generator`'s `generate` command to produce them. Covers locating or cloning the `eitri-shopping-app` repo, resolving the app folder under `app-generator/apps`, running the generator, reading the resulting files from `generated-apps/<app>`, and — critically — reconstructing the iOS file by hand from `appConfig.js` when generation silently fails to produce it, which is expected on any machine that is not a Mac.
+description: Fetch the Android (`assetlinks.json`) and iOS (`apple-app-site-association`) App Links / Universal Links files for a brand built from the `eitri-shopping-app` app-generator (bitbucket.org/smartsolutionteam/eitri-shopping-app). ALWAYS invoke this skill whenever the user asks for a brand's deeplink files, `assetlinks.json`, `apple-app-site-association`, App Links / Universal Links config, or wants to run `app-generator`'s `generate` command to produce them. Covers locating or cloning the `eitri-shopping-app` repo, resolving the app folder under `app-generator/apps`, running the generator, reading the resulting files from `generated-apps/<app>`, and — critically — reconstructing the iOS file by hand from `appConfig.js` when generation silently fails to produce it, which is expected on any machine that is not a Mac. NOT for the `Eitri.deeplink.*` runtime API (opening/checking a deeplink from inside app JS) — that's `eitri-bifrost`.
 allowed-tools: Read, Grep, Glob, Bash, Write
 ---
 
@@ -10,7 +10,11 @@ Fetches the two files a brand needs to register **App Links (Android)** and **Un
 
 For the bigger picture — the deeplink URL format (`prefix://action?params`), supported actions, and why these platform files must be published under `.well-known/` on the brand's own domain — see the official docs: https://docs.eitri.tech/en/eitri-shopping/deeplinks/. That page covers the deeplink resolver addon and URL scheme; it does not cover `app-generator` or `appConfig.js`, which is what this skill is for.
 
+**Not what this skill is for:** opening or checking a deeplink from inside an Eitri-App's own JavaScript (`Eitri.deeplink.canOpen` / `Eitri.deeplink.open`) — that's the `eitri-bifrost` skill's runtime API, sourced from its own typedoc. This skill is about the *native-shell registration* side: the platform files that let the OS route a tapped link to the app at all.
+
 Unless the user asks for only one platform, **assume they want both.**
+
+> **Unlike Bifrost/Luminus, there is no live doc for `app-generator`'s internals.** Everything below (file paths, the plutil root cause, the reconstruction algorithm) was read directly out of `app-generator/services/deepLinkHandler/*.ts` and `plistTools.ts` at one point in time — there's no typedoc or docs page to re-check against. If behavior here doesn't match what you see in a real run, prefer re-reading that source over trusting this snapshot.
 
 ---
 
