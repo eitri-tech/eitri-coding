@@ -39,10 +39,10 @@ From here on, `<repo>` means this checkout's root.
 
 ## Step 2 — Resolve the app name
 
-`<nome-do-app>` is a folder under `<repo>/app-generator/apps`, organized in up to **two levels**: either `apps/<AppName>` directly, or `apps/<Group>/<AppName>` (groups seen in the wild: `working`, `production`, `mobfiq`, `pocs`, `disabled`, `mobfiq-pocs`). The generator itself resolves both levels automatically — you only need the leaf name (`Seara`, not `working/Seara`) — so find it with:
+`<app-name>` is a folder under `<repo>/app-generator/apps`, organized in up to **two levels**: either `apps/<AppName>` directly, or `apps/<Group>/<AppName>` (groups seen in the wild: `working`, `production`, `mobfiq`, `pocs`, `disabled`, `mobfiq-pocs`). The generator itself resolves both levels automatically — you only need the leaf name (`Seara`, not `working/Seara`) — so find it with:
 
 ```bash
-find <repo>/app-generator/apps -maxdepth 2 -type d -iname "<nome-do-app>"
+find <repo>/app-generator/apps -maxdepth 2 -type d -iname "<app-name>"
 ```
 
 If it doesn't match anything, list the group folders and ask the user to confirm the exact name/casing — app names are case-sensitive folder names (`OscarCalcados`, `MonteCarlo`, ...).
@@ -61,30 +61,30 @@ From `<repo>/app-generator`:
 ```bash
 cd <repo>/app-generator
 npm install   # only if node_modules is missing
-node --run generate <nome-do-app>
+node --run generate <app-name>
 ```
 
 If the Node version doesn't support `--run` (added in Node 22; check with `node --version`), fall back to:
 
 ```bash
-npm run generate <nome-do-app>
+npm run generate <app-name>
 ```
 
 Notes:
 - You can restrict to one platform by appending `android` or `ios` (e.g. `... generate Seara android`) — useful if the user only wants one file, since a full run does real image/Xcode-project work for both platforms.
 - **Do not add `--dev`** unless the user explicitly wants a dev build's deeplink files — `--dev` suffixes `packageName`/`bundleId` with `.dev`, which produces files that don't match the real store listing.
-- A non-zero exit or `[ FAILED ]` in the log for one platform doesn't necessarily block the other — check `generated-apps/<nome-do-app>` regardless (next step) before concluding nothing was produced.
+- A non-zero exit or `[ FAILED ]` in the log for one platform doesn't necessarily block the other — check `generated-apps/<app-name>` regardless (next step) before concluding nothing was produced.
 
 ## Step 4 — Read the generated files
 
-Output lands in `<repo>/generated-apps/<nome-do-app>/`, one subfolder per configured host (from `universalDeeplink.urlMapping.hosts` in `appConfig.js` — a brand can have more than one, so check for all of them):
+Output lands in `<repo>/generated-apps/<app-name>/`, one subfolder per configured host (from `universalDeeplink.urlMapping.hosts` in `appConfig.js` — a brand can have more than one, so check for all of them):
 
 | Platform | Path |
 | --- | --- |
-| Android | `generated-apps/<nome-do-app>/android/deeplinks/<site-do-app>/assetlinks.json` |
-| iOS | `generated-apps/<nome-do-app>/ios/deeplinks/<site-do-app>/apple-app-site-association` |
+| Android | `generated-apps/<app-name>/android/deeplinks/<app-host>/assetlinks.json` |
+| iOS | `generated-apps/<app-name>/ios/deeplinks/<app-host>/apple-app-site-association` |
 
-`<site-do-app>` is the `host` value itself (e.g. `www.seara.com.br`), used verbatim as the folder name.
+`<app-host>` is the `host` value itself (e.g. `www.seara.com.br`), used verbatim as the folder name.
 
 Android's `assetlinks.json` is plain JS with no OS dependency, so it reliably appears after Step 3 regardless of platform. If it's missing, something else went wrong in generation — check the log, don't assume it's the same macOS trap described next.
 
@@ -96,7 +96,7 @@ Android's `assetlinks.json` is plain JS with no OS dependency, so it reliably ap
 - On Linux/Windows, `/usr/bin/plutil` doesn't exist, that call throws, and the **whole method** is wrapped in one `try/catch` that just logs and swallows the error.
 - Because `generateAppSiteAssociationFile()` (the function that actually writes `apple-app-site-association`) runs *after* the plutil step **in the same try block**, it never executes. Only `ios/deeplinks/DeeplinksTutorial.md` ends up on disk — no per-host folder, no file.
 
-So: **on a non-Mac machine, expect `ios/deeplinks/<site-do-app>/` to not exist after Step 3.** This is not a bug to troubleshoot — it's expected, and it is exactly what the user is asking this skill to work around.
+So: **on a non-Mac machine, expect `ios/deeplinks/<app-host>/` to not exist after Step 3.** This is not a bug to troubleshoot — it's expected, and it is exactly what the user is asking this skill to work around.
 
 **Fallback — reconstruct it from `appConfig.js`.** The generation logic itself is pure JSON assembly (nothing macOS-specific about the *content*), so reproduce it directly:
 
@@ -117,7 +117,7 @@ const content = {
 }
 ```
 
-Read the needed fields straight from `<repo>/app-generator/apps/**/<nome-do-app>/appConfig.js` (Step 2), build this JSON per host, and either hand it directly to the user or write it to the same path the real generator would have used (`generated-apps/<nome-do-app>/ios/deeplinks/<site-do-app>/apple-app-site-association`) so it's discoverable the same way. **Always tell the user this file was hand-reconstructed, not generated by the real pipeline** — if a Mac-generated copy exists in CI artifacts or a release, that one is authoritative; this is a stand-in.
+Read the needed fields straight from `<repo>/app-generator/apps/**/<app-name>/appConfig.js` (Step 2), build this JSON per host, and either hand it directly to the user or write it to the same path the real generator would have used (`generated-apps/<app-name>/ios/deeplinks/<app-host>/apple-app-site-association`) so it's discoverable the same way. **Always tell the user this file was hand-reconstructed, not generated by the real pipeline** — if a Mac-generated copy exists in CI artifacts or a release, that one is authoritative; this is a stand-in.
 
 ## Step 6 — Deliver
 
