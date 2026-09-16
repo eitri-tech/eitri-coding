@@ -8,6 +8,8 @@ allowed-tools: Read, Grep, Glob, Bash, Write
 
 Fetches the two files a brand needs to register **App Links (Android)** and **Universal Links (iOS)** for an `eitri-shopping-app` brand: `assetlinks.json` and `apple-app-site-association`. Both are produced by running that repo's `app-generator`, then reading its output — this skill does not compute them from scratch except as an iOS fallback (Step 5).
 
+For the bigger picture — the deeplink URL format (`prefix://action?params`), supported actions, and why these platform files must be published under `.well-known/` on the brand's own domain — see the official docs: https://docs.eitri.tech/en/eitri-shopping/deeplinks/. That page covers the deeplink resolver addon and URL scheme; it does not cover `app-generator` or `appConfig.js`, which is what this skill is for.
+
 Unless the user asks for only one platform, **assume they want both.**
 
 ---
