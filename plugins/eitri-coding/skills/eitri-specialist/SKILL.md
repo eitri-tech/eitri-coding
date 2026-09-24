@@ -103,6 +103,10 @@ Use **only** these versions — no substitutions:
 - `eitri app start` — Start N Eitri-Apps when in a directory containing `app-config.yaml`
 - `eitri push-version` — Deploy a new version. Add `--shared` for shared-type apps. **Always increment the `version` in `eitri-app.conf.js` before running.**
 
+### Version Bump Reminder
+
+**After completing any coding task**, chain to the `eitri-version-bump` skill to remind the user about incrementing the version. This is mandatory — forgetting to bump causes deploy failures and version conflicts. The companion skill offers an automated Python script that handles patch/minor/major bumps in `eitri-app.conf.js`.
+
 ---
 
 ## File-Based Routing & Parameters
