@@ -172,21 +172,30 @@ import { useState, useEffect } from 'react'
 import { View, Text } from 'eitri-luminus'
 import Eitri from 'eitri-bifrost'
 
-const [items, setItems] = useState([])
+export default function ProductList(props) {
+  const [items, setItems] = useState([])
+  // ...
+}
 ```
 
 ```tsx
 // Forbidden — hook used without being imported (no `from 'react'` in the file)
 import { View, Text } from 'eitri-luminus'
 
-const [items, setItems] = useState([])
+export default function ProductList(props) {
+  const [items, setItems] = useState([])
+  // ...
+}
 ```
 
 ```tsx
 // Forbidden — namespace access instead of a named import
 import React from 'react'
 
-const [items, setItems] = React.useState([])
+export default function ProductList(props) {
+  const [items, setItems] = React.useState([])
+  // ...
+}
 ```
 
 ### Runtime Safety (applies to every request, always)
