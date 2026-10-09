@@ -51,7 +51,7 @@ Forge transforms the React/Tailwind source into a native mobile interface — so
 ## Hard rules (non-negotiable)
 
 1. **No raw HTML tags.** `div`, `span`, `p`, `img`, `button`, `input`, `a`, `ul`, `li`, `h1..h6`, `section`, `header`, `footer`, etc. are **forbidden**. Use the Luminus equivalent.
-2. **Imports come from `eitri-luminus` only.**
+2. **UI components are imported from `eitri-luminus` only** (React hooks, Bifrost and the rest follow the explicit-import rule in `eitri-specialist`).
    ```jsx
    import { View, Text, Button, Card } from 'eitri-luminus'
    ```
