@@ -163,7 +163,7 @@ export default function ProductList({ id, name }) { ... }
 
 ### Imports
 
-- **Every import is explicit.** Each identifier a file uses must be imported by name at the top of that file — never rely on a global, an auto-injected scope, or something "already available" because another file imported it.
+- **Every import is explicit.** Anything a file uses that comes from a module — a package (`react`, `eitri-luminus`, `eitri-bifrost`, shared libs) or another project file — must be imported by name at the top of that file. Never rely on a module binding being an injected global (e.g. the `Eitri` object without `import Eitri from 'eitri-bifrost'`) or "already available" because another file imported it. Language/runtime built-ins (`Promise`, `Array`, `console`, …) and locally declared names are not imports and stay as they are.
 - **React especially.** Import every hook and API you use by name from `react`; do not reach through a namespace (`React.useState`) or assume `React` is in scope.
 
 ```tsx
