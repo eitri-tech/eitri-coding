@@ -161,6 +161,24 @@ export default const ProductList = (props) => { ... }
 export default function ProductList({ id, name }) { ... }
 ```
 
+### Imports
+
+- **Every import is explicit.** Each identifier a file uses must be imported by name at the top of that file — never rely on a global, an auto-injected scope, or something "already available" because another file imported it.
+- **React especially.** Import every hook and API you use by name from `react`; do not reach through a namespace (`React.useState`) or assume `React` is in scope.
+
+```tsx
+// Correct
+import { useState, useEffect } from 'react'
+import { View, Text } from 'eitri-luminus'
+import Eitri from 'eitri-bifrost'
+
+// Forbidden — hook used without being imported
+const [items, setItems] = useState([])
+
+// Forbidden — namespace access instead of a named import
+const [items, setItems] = React.useState([])
+```
+
 ### Runtime Safety (applies to every request, always)
 
 Eitri-Apps run inside a WebView: a `TypeError` does not surface as a build error, it blanks the screen on the user's phone. There is no type checker or linter between your code and production, so **every piece of code you write or edit must be defensive by default** — this is not optional and does not depend on the user asking for it.
