@@ -6,14 +6,14 @@ allowed-tools: Read, Grep, Glob, Write, Edit, WebFetch
 
 # SKILL.md — eitri-bifrost
 
-Authoring + reference skill for **eitri-bifrost** (`Eitri` global / `eitri-bifrost` package), the native bridge every Eitri-app uses to talk to the host (EitriPlay / production shell). This skill is the source of truth for *which capabilities exist*, *how to call them*, and *which rules must be followed* when wiring native features into Luminus views. For exact prop/return shapes, fall back to the official typedoc (see **Live docs**).
+Authoring + reference skill for **eitri-bifrost** (the `Eitri` object, always imported with `import Eitri from 'eitri-bifrost'`), the native bridge every Eitri-app uses to talk to the host (EitriPlay / production shell). This skill is the source of truth for *which capabilities exist*, *how to call them*, and *which rules must be followed* when wiring native features into Luminus views. For exact prop/return shapes, fall back to the official typedoc (see **Live docs**).
 
 ## When to use
 
 Trigger automatically when any of these are true:
 
 - The user asks about a Bifrost capability ("how do I get the user's location?", "how do I save data between sessions?", "how do I open a deeplink?").
-- The user is editing/creating files that import from `eitri-bifrost` or use the `Eitri` global.
+- The user is editing/creating files that import from `eitri-bifrost` or use `Eitri.*`.
 - The user is asking how to do something that, in a normal web app, would use `fetch`, `localStorage`/`sessionStorage`, `navigator.*`, `window.open`, `<a href>`, browser geolocation, browser camera — in Eitri these all map to Bifrost.
 - A code review involves Bifrost correctness (`await` on async APIs, `canIUse` capability checks, permission flow before sensors, no use of forbidden web primitives).
 - The user explicitly mentions Bifrost, native bridge, EitriPlay capabilities, modules metadata, or "is this API available?".
@@ -282,6 +282,8 @@ Use the underlying instance's API to send events. Fetch `_internal_.Tracking.htm
 ---
 
 ## Canonical examples
+
+Only the first snippet shows `import Eitri from 'eitri-bifrost'`; the rest are fragments. Every real file that uses `Eitri` must import it explicitly (see the import rule in `eitri-specialist`).
 
 ### Navigation
 

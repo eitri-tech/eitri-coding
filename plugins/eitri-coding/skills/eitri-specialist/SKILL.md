@@ -163,8 +163,8 @@ export default function ProductList({ id, name }) { ... }
 
 ### Imports
 
-- **Every import is explicit.** Anything a file uses that comes from a module — a package (`react`, `eitri-luminus`, `eitri-bifrost`, shared libs) or another project file — must be imported by name at the top of that file. Never rely on a module binding being an injected global (e.g. the `Eitri` object without `import Eitri from 'eitri-bifrost'`) or "already available" because another file imported it. Language/runtime built-ins (`Promise`, `Array`, `console`, …) and locally declared names are not imports and stay as they are.
-- **React especially.** Import every hook and API you use by name from `react`; do not reach through a namespace (`React.useState`) or assume `React` is in scope.
+- **Every import is explicit.** Every binding a file uses that comes from a module — a package (`react`, `eitri-luminus`, `eitri-bifrost`, shared libs) or another project file — must have an import declaration at the top of that file. Default imports are fine (`import Eitri from 'eitri-bifrost'`). Never rely on a module binding being an injected global (e.g. using `Eitri` without importing it) or "already available" because another file imported it. Language/runtime built-ins (`Promise`, `Array`, `console`, …) and locally declared names are not imports and stay as they are.
+- **React especially.** Every hook and API from `react` is a named import; do not reach through a namespace (`React.useState`). Importing `React` itself is allowed when the JSX transform or a type needs it, but hooks still come in as named imports.
 
 ```tsx
 // Correct
@@ -172,10 +172,20 @@ import { useState, useEffect } from 'react'
 import { View, Text } from 'eitri-luminus'
 import Eitri from 'eitri-bifrost'
 
-// Forbidden — hook used without being imported
 const [items, setItems] = useState([])
+```
 
+```tsx
+// Forbidden — hook used without being imported (no `from 'react'` in the file)
+import { View, Text } from 'eitri-luminus'
+
+const [items, setItems] = useState([])
+```
+
+```tsx
 // Forbidden — namespace access instead of a named import
+import React from 'react'
+
 const [items, setItems] = React.useState([])
 ```
 
