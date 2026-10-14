@@ -161,6 +161,43 @@ export default const ProductList = (props) => { ... }
 export default function ProductList({ id, name }) { ... }
 ```
 
+### Imports
+
+- **Every import is explicit.** Every binding a file uses that comes from a module — a package (`react`, `eitri-luminus`, `eitri-bifrost`, shared libs) or another project file — must have an import declaration at the top of that file. Default imports are fine (`import Eitri from 'eitri-bifrost'`). Never rely on a module binding being an injected global (e.g. using `Eitri` without importing it) or "already available" because another file imported it. Language/runtime built-ins (`Promise`, `Array`, `console`, …) and locally declared names are not imports and stay as they are.
+- **React especially.** Every hook and API from `react` is a named import; do not reach through a namespace (`React.useState`). Importing `React` itself is allowed when the JSX transform or a type needs it, but hooks still come in as named imports.
+
+```tsx
+// Correct
+import { useState, useEffect } from 'react'
+import { View, Text } from 'eitri-luminus'
+import Eitri from 'eitri-bifrost'
+
+export default function ProductList(props) {
+  const [items, setItems] = useState([])
+  // ...
+}
+```
+
+```tsx
+// Forbidden — hook used without being imported (no `from 'react'` in the file)
+import { View, Text } from 'eitri-luminus'
+
+export default function ProductList(props) {
+  const [items, setItems] = useState([])
+  // ...
+}
+```
+
+```tsx
+// Forbidden — namespace access instead of a named import
+import React from 'react'
+
+export default function ProductList(props) {
+  const [items, setItems] = React.useState([])
+  // ...
+}
+```
+
 ### Runtime Safety (applies to every request, always)
 
 Eitri-Apps run inside a WebView: a `TypeError` does not surface as a build error, it blanks the screen on the user's phone. There is no type checker or linter between your code and production, so **every piece of code you write or edit must be defensive by default** — this is not optional and does not depend on the user asking for it.
