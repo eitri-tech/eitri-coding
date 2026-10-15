@@ -254,6 +254,51 @@ Rule of thumb: for every optional access, answer *"what does the user see when t
 
 When editing existing code, apply the same standard to the lines you touch. If a defensive check would hide a real bug, prefer an explicit early return with a visible fallback over a silent default — but never leave the unguarded access.
 
+### React Gotchas (minified errors in production)
+
+Production React is minified: these crashes reach the error boundary only as `Minified React error #NNN`, take the whole screen down, and none of them is caught at build time. Never write the patterns below.
+
+| # | Cause | Rule |
+|---|---|---|
+| 130 | Element type is `undefined`: default vs named import mismatch, or a component that does not exist in the installed Luminus/lib version | Check how the module exports the binding before importing it; confirm in the Luminus docs that the component exists in the pinned version |
+| 306 | `lazy()` resolved to a module without a default export | Use `lazy(() => import(...))` only on modules with `export default`; for a named export, `.then(m => ({ default: m.X }))` |
+| 31 | Object rendered as a JSX child (`{product}`, `{error}`, `{date}`) | Render a primitive field, `.map` lists, and format dates/errors to strings (`error.message`, a date formatter) |
+| 152 | Component returned nothing (arrow body with `{}` and no `return`, a branch without `return`) | Every code path returns JSX or `null` |
+| 301 | `setState` called during render — including `onClick={setOpen(true)}` | Handlers are always functions (`onClick={() => setOpen(true)}`); derived state is computed in render, not stored with `setState` |
+| 185 | Update loop: `setState` inside a `useEffect` with no dependency array, or with deps that change every render (object/array/function literals) | Always declare deps, keep them stable, and only `setState` in an effect when the value actually changed |
+| 300 / 310 | Hook count changed between renders: a hook inside `if`/loops or **after an early return** | All hooks at the top of the component, before any `return` |
+| 321 | Hook called outside a component (utility function, callback, class) or duplicate React in the bundle | Hooks only in a component body or a custom `useX` hook; never add `react` as a dependency of a shared lib |
+
+The defensive early return from *Runtime Safety* must come **after** every hook — that is the most common way to cause #300/#310:
+
+```tsx
+// Correct
+export default function ProductDetail(props) {
+  const productId = props.match?.params?.id
+  const [product, setProduct] = useState(null)
+  useEffect(() => { /* load product */ }, [productId])
+
+  if (!productId) return <EmptyState />
+  // ...
+}
+
+// Forbidden — useState/useEffect are skipped when productId is missing (#300 / #310)
+export default function ProductDetail(props) {
+  const productId = props.match?.params?.id
+  if (!productId) return <EmptyState />
+
+  const [product, setProduct] = useState(null)
+  useEffect(() => { /* load product */ }, [productId])
+  // ...
+}
+```
+
+Warn the developer:
+
+- **Lines you write or edit** must not contain any of these patterns — fix them before delivering.
+- **Patterns you notice outside the requested scope** (while reading or editing nearby code) must be reported explicitly in your answer with `file:line`, the error code (e.g. `#310`) and the suggested fix. Do not silently fix them and do not ignore them.
+- **Changes that can introduce one elsewhere** — switching a default export to named breaks importers (#130), moving an early return above hooks (#310), removing an effect's deps (#185) — must be called out, and the affected call sites updated.
+
 ---
 
 ## Running & Inspecting the App on a Device
@@ -285,5 +330,6 @@ Two rules that stay here because they constrain *coding* work, not just automati
 
 - Never act blind — always observe first
 - Assume the data is missing until proven otherwise; a screen that renders nothing is a bug, not a pass
+- Know the minified React error codes; flag any pattern that triggers one
 - Think like QA + Dev simultaneously
 - Use official boilerplates and documentation as the primary source of truth — never guess dependency names or versions
