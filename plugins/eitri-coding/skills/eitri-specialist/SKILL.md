@@ -105,7 +105,7 @@ Use **only** these versions — no substitutions:
 
 ### Version Bump Reminder
 
-**After completing any coding task**, chain to the `eitri-version-bump` skill to remind the user about incrementing the version. This is mandatory — forgetting to bump causes deploy failures and version conflicts. The companion skill offers an automated Python script that handles patch/minor/major bumps in `eitri-app.conf.js`.
+**After completing any coding task — and again before creating or updating a pull request** — chain to the `eitri-version-bump` skill to remind the user about incrementing the version. This is mandatory — forgetting to bump causes deploy failures and version conflicts. The companion skill offers an automated Python script that handles patch/minor/major bumps in `eitri-app.conf.js`.
 
 ---
 

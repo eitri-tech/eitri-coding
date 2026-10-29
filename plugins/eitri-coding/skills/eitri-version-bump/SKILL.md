@@ -4,9 +4,11 @@ description: >-
   Lembrete e automação de bump semver em projetos Eitri. SEMPRE ativar ao
   concluir qualquer tarefa de codificação num projeto Eitri — lembre o
   usuário de incrementar a versão no eitri-app.conf.js (patch ou minor)
-  e ofereça executar o bump via script Python. Também ativar quando o
-  usuário mencionar "bump", "versão", "version", "push-version",
-  "deploy" ou "publicar" no contexto de um Eitri-App.
+  e ofereça executar o bump via script Python. Também ativar ANTES de
+  criar ou atualizar um pull request (ou commitar para ele) num projeto
+  Eitri, e quando o usuário mencionar "bump", "versão", "version",
+  "push-version", "deploy", "publicar", "pull request" ou "PR" no
+  contexto de um Eitri-App.
 ---
 
 # Eitri Version Bump
@@ -17,8 +19,15 @@ description: >-
 (detectado por `eitri-app.conf.js` ou `app-config.yaml`), este skill
 deve ser invocado para lembrar o desenvolvedor de dar bump na versão.
 
+**Antes de criar ou atualizar um pull request** num projeto Eitri,
+confira se a versão do `eitri-app.conf.js` já foi incrementada em
+relação à branch base. Esse é o momento em que o bump mais costuma ser
+esquecido, porque o código já foi escrito e nada mais dispara o
+lembrete. Se a versão não mudou, invoque o fluxo abaixo **antes** de
+abrir o PR; se mudou, apenas confirme a versão ao usuário.
+
 Ativar também quando o usuário mencionar "bump", "versão", "version",
-"push-version", "deploy" ou "publicar".
+"push-version", "deploy", "publicar", "pull request" ou "PR".
 
 ## Fluxo
 
