@@ -1,97 +1,100 @@
 ---
 name: eitri-version-bump
 description: >-
-  Lembrete e automação de bump semver em projetos Eitri. SEMPRE ativar ao
-  concluir qualquer tarefa de codificação num projeto Eitri — lembre o
-  usuário de incrementar a versão no eitri-app.conf.js (patch ou minor)
-  e ofereça executar o bump via script Python. Também ativar ANTES de
-  criar ou atualizar um pull request (ou commitar para ele) num projeto
-  Eitri, e quando o usuário mencionar "bump", "versão", "version",
-  "push-version", "deploy", "publicar", "pull request" ou "PR" no
-  contexto de um Eitri-App.
+  Semver bump reminder and automation for Eitri projects. ALWAYS activate
+  when finishing any coding task in an Eitri project — remind the user to
+  increment the version in eitri-app.conf.js (patch or minor) and offer to
+  run the bump through the Python script. Also activate BEFORE creating or
+  updating a pull request (or committing to one) in an Eitri project, and
+  whenever the user mentions "bump", "version", "versão", "push-version",
+  "deploy", "publish", "publicar", "pull request" or "PR" in the context
+  of an Eitri-App.
 ---
 
 # Eitri Version Bump
 
-## Quando ativar
+## When to activate
 
-**Ao concluir qualquer tarefa de codificação** em um projeto Eitri
-(detectado por `eitri-app.conf.js` ou `app-config.yaml`), este skill
-deve ser invocado para lembrar o desenvolvedor de dar bump na versão.
+**When finishing any coding task** in an Eitri project (detected by
+`eitri-app.conf.js` or `app-config.yaml`), this skill must be invoked to
+remind the developer to bump the version.
 
-**Antes de criar ou atualizar um pull request** num projeto Eitri,
-confira se a versão do `eitri-app.conf.js` já foi incrementada em
-relação à branch base. Esse é o momento em que o bump mais costuma ser
-esquecido, porque o código já foi escrito e nada mais dispara o
-lembrete. Se a versão não mudou, invoque o fluxo abaixo **antes** de
-abrir o PR; se mudou, apenas confirme a versão ao usuário.
+**Before creating or updating a pull request** in an Eitri project, check
+whether the version in `eitri-app.conf.js` has already been incremented
+relative to the base branch. This is the moment the bump is most often
+forgotten, because the code is already written and nothing else triggers
+the reminder. If the version did not change, run the flow below **before**
+opening the PR; if it did, just confirm the version to the user.
 
-Ativar também quando o usuário mencionar "bump", "versão", "version",
-"push-version", "deploy", "publicar", "pull request" ou "PR".
+Also activate when the user mentions "bump", "version", "versão",
+"push-version", "deploy", "publish", "publicar", "pull request" or "PR".
 
-## Fluxo
+## Flow
 
-1. **Leia a versão atual** do `eitri-app.conf.js` e mostre ao usuário:
+1. **Read the current version** from `eitri-app.conf.js` and show it to
+   the user:
 
-   > 📦 **Versão atual:** `X.Y.Z` (em `eitri-app.conf.js`)
+   > 📦 **Current version:** `X.Y.Z` (in `eitri-app.conf.js`)
 
-2. **Lembre o usuário** que a versão precisa ser incrementada antes do
+2. **Remind the user** that the version must be incremented before
    `eitri push-version`:
 
-   > ⚠️ **Lembrete de versão:** Antes de fazer `eitri push-version`,
-   > incremente a versão em `eitri-app.conf.js`.
+   > ⚠️ **Version reminder:** Before running `eitri push-version`,
+   > increment the version in `eitri-app.conf.js`.
 
-3. **Pergunte o tipo de bump:**
-   - **patch** (ex: `1.2.3` → `1.2.4`) — correções, ajustes visuais,
-     refatorações internas
-   - **minor** (ex: `1.2.3` → `1.3.0`) — nova funcionalidade, nova view,
-     nova integração
-   - **major** (ex: `1.2.3` → `2.0.0`) — breaking changes, reescrita
-     significativa
-   - **Agora não** — o usuário fará o bump manualmente mais tarde
+3. **Ask for the bump type:**
+   - **patch** (e.g. `1.2.3` → `1.2.4`) — fixes, visual tweaks, internal
+     refactors
+   - **minor** (e.g. `1.2.3` → `1.3.0`) — new feature, new view, new
+     integration
+   - **major** (e.g. `1.2.3` → `2.0.0`) — breaking changes, significant
+     rewrite
+   - **Not now** — the user will bump manually later
 
-4. **Sugira uma `versionMessage`** baseada nas alterações feitas na task.
-   A mensagem é **obrigatória** — todo bump deve ter uma descrição.
-   A mensagem deve ser curta e descritiva (1 linha). Exemplos:
+4. **Suggest a `versionMessage`** based on the changes made in the task.
+   The message is **mandatory** — every bump must have a description. It
+   should be short and descriptive (one line). Examples:
 
-   - `"Correção do cálculo de frete no checkout"`
-   - `"Nova tela de detalhes do produto"`
-   - `"Refatoração dos providers de autenticação"`
+   - `"Fix shipping cost calculation at checkout"`
+   - `"New product detail screen"`
+   - `"Refactor authentication providers"`
 
-   Apresente a sugestão e pergunte se o usuário quer usar essa mensagem
-   ou editar. **Não prossiga sem uma mensagem definida.**
+   Present the suggestion and ask whether the user wants to use it or
+   edit it. **Do not proceed without a defined message.**
 
-5. **Execute o script** com a flag `--message` (sempre obrigatória):
+5. **Run the script** with the `--message` flag (always required):
 
    ```bash
-   python3 "<SKILL_DIR>/scripts/bump_version.py" <patch|minor|major> <path/to/eitri-app.conf.js> --message "descrição das alterações"
+   python3 "<SKILL_DIR>/scripts/bump_version.py" <patch|minor|major> <path/to/eitri-app.conf.js> --message "description of the changes"
    ```
 
-   Substitua `<SKILL_DIR>` pelo caminho absoluto do diretório desta skill.
+   Replace `<SKILL_DIR>` with the absolute path of this skill's directory.
 
-6. **Se o usuário recusar o bump**, respeite — ele pode querer fazer
-   manualmente mais tarde. Apenas confirme que ele está ciente:
+6. **If the user declines the bump**, respect that — they may want to do
+   it manually later. Just confirm they are aware:
 
-   > 👍 Sem problemas. Lembre de incrementar a versão antes do próximo
+   > 👍 No problem. Remember to increment the version before the next
    > `eitri push-version`.
 
-## Regras
+## Rules
 
-- **Nunca faça o bump sem perguntar.** Sempre ofereça e espere
-  confirmação explícita do usuário.
-- **A `versionMessage` é obrigatória.** Todo bump deve incluir uma
-  mensagem descrevendo as alterações. Nunca execute o script sem
-  `--message`. Sugira uma mensagem baseada no que foi feito na task.
-- **Se a task foi trivial** (ex: só leu código, respondeu uma pergunta,
-  não alterou nenhum arquivo), não é necessário lembrar.
-- **Em workspaces multi-app** (`app-config.yaml`), identifique qual app
-  foi alterado e ofereça bump apenas para ele.
-- **Mostre a versão atual** antes de propor o bump para o usuário ter
-  contexto.
-- **Após o bump**, mostre a versão nova e confirme que o arquivo foi
-  atualizado.
+- **Never bump without asking.** Always offer and wait for explicit
+  confirmation from the user.
+- **The `versionMessage` is mandatory.** Every bump must include a message
+  describing the changes. Never run the script without `--message`.
+  Suggest a message based on what was done in the task.
+- **If the task was trivial** (e.g. only read code, answered a question,
+  changed no files), there is no need to remind.
+- **In multi-app workspaces** (`app-config.yaml`), identify which app was
+  changed and offer the bump only for it.
+- **Show the current version** before proposing the bump so the user has
+  context.
+- **After the bump**, show the new version and confirm the file was
+  updated.
+- **Reply in the user's language.** The quoted messages above are
+  templates; translate them to the language the user is writing in.
 
-## Localização do script
+## Script location
 
-O script Python fica em:
+The Python script lives at:
 [bump_version.py](./scripts/bump_version.py)
