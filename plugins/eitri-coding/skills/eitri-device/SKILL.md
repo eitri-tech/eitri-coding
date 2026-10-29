@@ -8,10 +8,10 @@ allowed-tools: Read, Grep, Glob, Bash
 
 Companion to `eitri-specialist`. That skill owns how Eitri code is written; this one owns how the running app is observed and driven. Project-wide rules from `eitri-specialist` always win on conflict.
 
-Tool paths below assume the marketplace install location:
+Tool paths below are relative to this skill's folder. Claude Code expands `${CLAUDE_SKILL_DIR}` to it; in other clients, use the directory that contains this `SKILL.md`:
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-device/tools/
+${CLAUDE_SKILL_DIR}/tools/
 ```
 
 Shortened to `.../` in examples.
@@ -23,7 +23,7 @@ Shortened to `.../` in examples.
 You interact with the Android app via:
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-device/tools/android.py
+${CLAUDE_SKILL_DIR}/tools/android.py
 ```
 
 ### Available Commands
@@ -227,7 +227,7 @@ python3 .../android.py screenshot
 `tools/ios.py` mirrors `android.py`'s command surface for the iOS Simulator. Same commands, same JSON output, same Eitri-domain classification — only the plumbing differs, and the injected JavaScript is literally the same code (both tools share `tools/webinspect.py`).
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-device/tools/ios.py
+${CLAUDE_SKILL_DIR}/tools/ios.py
 ```
 
 **Setup (once):**

@@ -1,12 +1,14 @@
 {
   "name": "eitri-coding",
-  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost and drives them on Android devices and iOS simulators",
-  "version": "1.6.2",
+  "displayName": "Eitri Coding",
+  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, and clones live websites into Eitri views",
+  "version": "1.7.0",
   "author": {
     "name": "Eitri",
     "url": "https://eitri.tech"
   },
   "license": "Apache-2.0",
   "homepage": "https://eitri.tech",
-  "repository": "https://github.com/eitri-tech/eitri-coding"
+  "repository": "https://github.com/eitri-tech/eitri-coding",
+  "keywords": ["eitri", "luminus", "bifrost", "mobile", "webview", "android", "ios", "mcp", "site-clone"]
 }
