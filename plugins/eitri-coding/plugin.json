@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "eitri-coding",
+  "version": "1.7.0",
+  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, and clones live websites into Eitri views",
+  "author": {
+    "name": "Eitri",
+    "url": "https://eitri.tech"
+  },
+  "homepage": "https://eitri.tech",
+  "repository": "https://github.com/eitri-tech/eitri-coding",
+  "license": "Apache-2.0",
+  "keywords": ["eitri", "luminus", "bifrost", "mobile", "webview", "android", "ios", "mcp", "site-clone"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Eitri Coding",
+        "shortDescription": "Build, run and debug Eitri-Apps with Luminus + Bifrost",
+        "developerName": "Eitri",
+        "category": "Developer Tools",
+        "capabilities": ["Interactive", "Read", "Write"],
+        "websiteURL": "https://eitri.tech",
+        "defaultPrompt": [
+          "Create a new screen in this Eitri-App.",
+          "Run the app on my Android device and check for errors."
+        ]
+      }
+    }
+  }
+}

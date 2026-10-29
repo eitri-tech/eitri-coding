@@ -1,6 +1,6 @@
 # eitri-coding
 
-Claude Code plugin that turns Claude into a Senior Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and drives them on real Android devices and iOS simulators.
+Plugin for Claude Code (also Codex and Hermes Agent) that turns your agent into a Senior Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and drives them on real Android devices and iOS simulators.
 
 ## Requirements
 
@@ -56,7 +56,39 @@ For a team repo, commit this to `.claude/settings.json` so every collaborator ge
 }
 ```
 
-Maintainers: `plugin.json` pins `version`, so users only receive a release when that string changes. Bump it in every release PR.
+Maintainers: `plugin.json` pins `version`, so users only receive a release when that string changes. Bump it in every release PR, in both `plugins/eitri-coding/.claude-plugin/plugin.json` and `plugins/eitri-coding/plugin.json`.
+
+## Other AI clients
+
+Besides the Claude Code manifests, the plugin ships an [Agent Plugins v1](https://agent-plugins.org) package (`plugins/eitri-coding/plugin.json` + `mcp.json`), which Codex and Hermes Agent both read. They get the same skills and the Eitri Manager MCP server.
+
+The SessionStart hook that auto-loads `eitri-specialist` in Eitri projects is Claude Code only. In other clients, ask for the skill by name (for example "use the eitri-specialist skill") at the start of a session.
+
+### Codex
+
+```bash
+codex plugin marketplace add eitri-tech/eitri-coding
+```
+
+Then open `/plugins` in Codex, install **Eitri Coding**, and start a new session. Update with `codex plugin marketplace upgrade eitri-plugins`.
+
+### Hermes Agent
+
+```bash
+hermes plugins install eitri-tech/eitri-coding/plugins/eitri-coding
+hermes plugins enable eitri-coding
+```
+
+Hermes needs `auth: oauth` to log in to the MCP server, which a portable package can't set. Add it to `~/.hermes/config.yaml` (this entry takes precedence over the package's) and run `hermes mcp login eitri-manager`:
+
+```yaml
+mcp_servers:
+  eitri-manager:
+    url: https://api.eitri.tech/eitri-manager-mcp/mcp
+    auth: oauth
+```
+
+Update with `hermes plugins update eitri-coding`.
 
 ## What it does
 
@@ -76,10 +108,14 @@ Each capability is a separate skill; `eitri-specialist` is the entry point and c
 
 ```
 .claude-plugin/
-  marketplace.json               # Marketplace definition (name: eitri-plugins)
+  marketplace.json               # Claude Code marketplace (name: eitri-plugins)
+.agents/plugins/
+  marketplace.json               # Codex marketplace
 plugins/eitri-coding/
-  .claude-plugin/plugin.json     # Plugin metadata
-  .mcp.json                      # Eitri Manager MCP server
+  .claude-plugin/plugin.json     # Claude Code manifest
+  .mcp.json                      # Eitri Manager MCP server (Claude Code)
+  plugin.json                    # Agent Plugins v1 manifest (Codex, Hermes)
+  mcp.json                       # Eitri Manager MCP server (Agent Plugins v1)
   hooks/                         # Loads the specialist skill on coding prompts in an Eitri project
   skills/
     eitri-specialist/            # Entry point: project rules, routing, runtime safety
