@@ -1,6 +1,6 @@
 ---
 name: eitri-device
-description: Drive and inspect a running Eitri-App on a real device or simulator — screenshots, taps, swipes, typing, native tab switching, and live DOM/console inspection of the Eitri WebView through the Chrome DevTools Protocol (Android) or the WebKit Inspector (iOS). ALWAYS invoke this skill whenever the work requires observing or interacting with the app as it runs: the user asks to open/run/launch the app, take a screenshot, tap/click/scroll something on the device, check what a screen looks like, reproduce a bug on device, read runtime console errors, confirm a generated view actually renders, or mentions ADB, EitriPlay, emulator, simulator, device, `android.py` or `ios.py`. Also invoke it whenever a coding change needs visual or runtime validation on device rather than only a code read.
+description: 'Drive and inspect a running Eitri-App on a real device or simulator — screenshots, taps, swipes, typing, native tab switching, and live DOM/console inspection of the Eitri WebView through the Chrome DevTools Protocol (Android) or the WebKit Inspector (iOS). ALWAYS invoke this skill whenever the work requires observing or interacting with the app as it runs: the user asks to open/run/launch the app, take a screenshot, tap/click/scroll something on the device, check what a screen looks like, reproduce a bug on device, read runtime console errors, confirm a generated view actually renders, or mentions ADB, EitriPlay, emulator, simulator, device, `android.py` or `ios.py`. Also invoke it whenever a coding change needs visual or runtime validation on device rather than only a code read.'
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -8,10 +8,10 @@ allowed-tools: Read, Grep, Glob, Bash
 
 Companion to `eitri-specialist`. That skill owns how Eitri code is written; this one owns how the running app is observed and driven. Project-wide rules from `eitri-specialist` always win on conflict.
 
-Tool paths below assume the marketplace install location:
+Tool paths below are relative to this skill's folder. Claude Code expands `${CLAUDE_SKILL_DIR}` to it; in other clients, use the directory that contains this `SKILL.md`:
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-device/tools/
+${CLAUDE_SKILL_DIR}/tools/
 ```
 
 Shortened to `.../` in examples.
@@ -23,7 +23,7 @@ Shortened to `.../` in examples.
 You interact with the Android app via:
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-device/tools/android.py
+${CLAUDE_SKILL_DIR}/tools/android.py
 ```
 
 ### Available Commands
@@ -227,7 +227,7 @@ python3 .../android.py screenshot
 `tools/ios.py` mirrors `android.py`'s command surface for the iOS Simulator. Same commands, same JSON output, same Eitri-domain classification — only the plumbing differs, and the injected JavaScript is literally the same code (both tools share `tools/webinspect.py`).
 
 ```
-~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/eitri-device/tools/ios.py
+${CLAUDE_SKILL_DIR}/tools/ios.py
 ```
 
 **Setup (once):**
