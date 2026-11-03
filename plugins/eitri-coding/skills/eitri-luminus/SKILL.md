@@ -75,7 +75,7 @@ Categories and component names mirror the official docs. Use this as a quick loo
 `View`, `Text`, `Image`, `Video`, `Markdown`, `Page`
 
 - `Page` — top-level container for a route under `src/views/`.
-- `View` — generic flex container (row by default); replaces `div`. Accepts sizing props, `className` and `onClick` (the whole area becomes tappable). Vertical stacks use `className="flex flex-col"`.
+- `View` — generic flex container (row by default); replaces `div`. Accepts sizing props, `className` and `onClick` (the whole area becomes tappable). Vertical stacks use `className="flex flex-col"` — the `orientation` prop does not work in v2.
 - `Text` — replaces `p`/`span`/headings; size/weight via Tailwind utilities (`text-lg`, `font-semibold`). **Has no `onClick`**: the handler is dropped silently. A tappable text goes inside a `View onClick` (or is a `Button`).
 - `Image` — replaces `img`; supports `src`, `alt`, sizing props.
 - `Video` — video playback.

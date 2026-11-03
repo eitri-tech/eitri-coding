@@ -143,7 +143,7 @@ Eitri does **not** use `App.tsx`. Centralize all global state in the `providers`
 - **No HTML tags:** `div`, `span`, `img`, `p`, `button`, etc. are **strictly forbidden** — use `eitri-luminus` components only
 - **Prohibited Tailwind utilities:** Do **not** use `hover:`, `focus-within:`, `active:`, or `focus:` — these cause "stuck" states on mobile touchscreens
 - **Sizing props:** `width`, `height`, `maxWidth`, `maxHeight`, `minWidth`, and `minHeight` are valid as direct component props
-- **Layout direction:** `View` is a flex container laid out as a row by default. Use Tailwind for direction and alignment (`flex-col`, `items-center`, `justify-between`). The `orientation` prop only appears in legacy code — keep it when editing such code, don't introduce it.
+- **Layout direction:** `View` is a flex container laid out as a row by default. Use Tailwind for direction and alignment (`flex-col`, `items-center`, `justify-between`). The `orientation` prop does not work in Luminus v2 — never use it, and replace it with `flex-col` / `flex-row` when you touch code that has it.
 - **Layout** Only do layout for mobile devices because Eitri apps are mobile mini-apps.
 - **Colors:** use theme classes (`bg-primary`, `text-base-content`, named colors from the theme's `extend`). An arbitrary hex (`bg-[#1E5BFF]`) is acceptable only for a true one-off and only if the project allows it; a color used in more than one place becomes a theme token first.
 - **`style` is for runtime values only.** Tailwind classes must be static strings, so a value that arrives at runtime (a color or image coming from the CMS, a computed width) cannot be a class: pass it through `style`, and only when the value exists. Everything static stays in `className`.

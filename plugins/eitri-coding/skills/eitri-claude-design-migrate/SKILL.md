@@ -39,7 +39,7 @@ Produce idiomatic Eitri (Luminus) source files that:
 - **No HTML tags.** `div`, `span`, `p`, `img`, `button`, `input`, `a`, `h1`–`h6`, `ul`, `li`, `section`, `header`, `footer`, `nav`, `svg` *containers*, etc. are forbidden. Always use `eitri-luminus` equivalents.
 - **No `hover:`, `focus:`, `focus-within:`, `active:` Tailwind utilities** — they get stuck on mobile touchscreens.
 - **Sizing as props:** `width`, `height`, `maxWidth`, `maxHeight`, `minWidth`, `minHeight` are direct props on Luminus components.
-- **`View` is a row flex container by default.** Vertical stacks use `className="flex flex-col"` (don't introduce the legacy `orientation` prop).
+- **`View` is a row flex container by default.** Vertical stacks use `className="flex flex-col"` (the `orientation` prop does not work in Luminus v2).
 - **Mobile-only layouts.** Eitri apps are mobile mini-apps — no responsive desktop breakpoints.
 - **Function components only:** `export default function ScreenName(props) { ... }` — no arrow functions for the main export, no destructuring in the signature.
 - **Pull params from props:**
