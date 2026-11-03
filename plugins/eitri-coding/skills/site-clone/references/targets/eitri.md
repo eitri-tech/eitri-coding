@@ -42,20 +42,32 @@ These invert the usual recreation rules, so read the tree with them in mind:
 Check the project's `.aiconfig` and `tailwind.config.js` for the theme before
 inventing token names — a DaisyUI theme is usually already defined.
 
-## Sections become CMS content types
+## CMS sections depend on the commerce platform
 
-An Eitri storefront home is CMS-driven the same way FastStore's is. The pattern
-(verify the local names — they differ per project):
+An Eitri storefront home is CMS-driven, but **which CMS depends on the commerce
+platform**, not on Eitri. Find the platform first — the `eitri-shopping-*-shared`
+dependency in `eitri-app.conf.js` (the `eitri-coding:eitri-shopping` skill has the
+full detection):
 
-1. `public/sections.json` — the schema a merchant edits, `{ name, schema }` entries
-   with `title` / `description` in the project's language.
-2. `public/content-types.json` — which sections each page may use.
-3. `src/components/CmsComponents/<Name>.tsx` — the Luminus component.
-4. The project's component map (commonly `src/utils/getMappedComponent.tsx`) —
-   `content.name` → component. Unregistered sections render nothing.
+| Platform | CMS adapter |
+|---|---|
+| **VTEX** (`eitri-shopping-vtex-shared`) | `references/targets/eitri-vtex.md` |
+| **Wake** (`eitri-shopping-wake-shared`) | not covered yet |
+| **Shopify** (`eitri-shopping-shopify-shared`) | not covered yet |
 
-So a captured section becomes: a schema entry, a component, and a map entry. Same
-three-part rule as FastStore.
+For a platform without an adapter:
+
+- **Do not apply the VTEX pattern.** Wake and Shopify apps do not read
+  `public/sections.json`; a schema added there does nothing.
+- **Do not silently hardcode the content either.** Read the project's own CMS service
+  and component map and follow the pattern already there (in the templates: Wake →
+  `src/services/CmsService.js` + `src/services/ComponentService.js`; Shopify →
+  `src/services/cmsService.ts` + `src/utils/getMappedComponent.ts`).
+- Tell the user this skill has no CMS adapter for that platform, and confirm where
+  the section content should live before building more than one section.
+
+Adding a platform means a new `eitri-<platform>.md` next to `eitri-vtex.md` and a row
+in this table.
 
 ## Behaviour translation
 

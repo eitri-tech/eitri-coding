@@ -204,13 +204,17 @@ you which elements to aim at.
 
 Read the adapter for the target framework **before** writing code:
 
-- **FastStore / VTEX** → `references/targets/faststore.md`
-- **Eitri (Luminus + Bifrost)** → `references/targets/eitri.md`
+- **FastStore (VTEX web storefront)** → `references/targets/faststore.md`
+- **Eitri (Luminus + Bifrost)** → `references/targets/eitri.md`, then the CMS adapter
+  for the app's commerce platform. Only VTEX has one (`references/targets/eitri-vtex.md`);
+  Wake and Shopify apps are not covered yet — `eitri.md` says what to do instead.
 - **Anything else** (Next.js, Vite, Astro, plain React) → `references/targets/generic.md`
 
 Identify the target from the project, not from the user's phrasing: `faststore.config.js`
 or `@faststore/core` → FastStore; `app-config.yaml` or `eitri-app.conf.js` → Eitri
-(and that project's own skills and `.aiconfig` outrank anything here).
+(and that project's own skills and `.aiconfig` outrank anything here). For Eitri, the
+`eitri-shopping-{vtex,wake,shopify}-shared` dependency in `eitri-app.conf.js` gives
+the platform.
 
 Then follow `references/recreate.md` — the loop, the fidelity bar, and the rules
 about what to translate versus copy verbatim. In short:
