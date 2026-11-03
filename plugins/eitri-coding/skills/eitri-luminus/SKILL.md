@@ -59,7 +59,7 @@ Forge transforms the React/Tailwind source into a native mobile interface — so
    ```jsx
    <View width="100%" maxWidth={420} height="auto">…</View>
    ```
-4. **Styling uses `className` with Tailwind / DaisyUI utilities.** Do not write raw `style={{}}` unless a Tailwind utility truly cannot express it.
+4. **Styling uses `className` with Tailwind / DaisyUI utilities.** `style={{}}` only for values known at runtime (CMS colors, computed sizes), which a static class cannot express — see `eitri-specialist`.
 5. **Text always lives inside `<Text>`** (or a component that itself renders text, like `Button`). Never put bare strings inside layout components like `View` directly when avoidable.
 6. **Pages are routed file-based** under `src/views/` (governed by `eitri-specialist`); each page wraps its content in `<Page>`.
 
@@ -75,8 +75,8 @@ Categories and component names mirror the official docs. Use this as a quick loo
 `View`, `Text`, `Image`, `Video`, `Markdown`, `Page`
 
 - `Page` — top-level container for a route under `src/views/`.
-- `View` — generic flex container; replaces `div`. Accepts sizing props + `className`.
-- `Text` — replaces `p`/`span`/headings; size/weight via Tailwind utilities (`text-lg`, `font-semibold`).
+- `View` — generic flex container (row by default); replaces `div`. Accepts sizing props, `className` and `onClick` (the whole area becomes tappable). Vertical stacks use `className="flex flex-col"`.
+- `Text` — replaces `p`/`span`/headings; size/weight via Tailwind utilities (`text-lg`, `font-semibold`). **Has no `onClick`**: the handler is dropped silently. A tappable text goes inside a `View onClick` (or is a `Button`).
 - `Image` — replaces `img`; supports `src`, `alt`, sizing props.
 - `Video` — video playback.
 - `Markdown` — renders markdown content.
@@ -114,6 +114,17 @@ Categories and component names mirror the official docs. Use this as a quick loo
 
 ---
 
+## Silent pitfalls
+
+These render without any error and only show up on the device:
+
+- **`onClick` on `Text`** is ignored — put it on the wrapping `View`.
+- **Negative z-index** (`-z-10`) sends the element behind the page background, so it disappears. To layer a decoration behind neighbors, keep it at the default level and lift the neighbors with `relative z-[1]`.
+- **New theme classes before a dev-server restart** render transparent (see *Theme* in `eitri-specialist`).
+- **Restyling a shared component from the screen** (`!important`, deep selectors) breaks with the next version of it. Add a prop to the shared component that the caller controls (e.g. a `className` for its background) and version it.
+
+---
+
 ## HTML → Luminus mapping (cheat sheet)
 
 | Raw HTML | Use |
@@ -128,6 +139,7 @@ Categories and component names mirror the official docs. Use this as a quick loo
 | `<a>` (in-app navigation) | Bifrost navigation API (see `eitri-specialist`) — not an HTML anchor |
 | `<ul>` / `<ol>` + `<li>` | `<List>` or `<View>` + mapped `<View>`/`<Text>` rows |
 | `<hr>` | `<Divider>` |
+| `<svg>` icon | `react-icons` or the project's icon component (raw `<svg>` only inside a dedicated icon component) |
 | `<section>` / `<header>` / `<footer>` | `<View>` with semantic className |
 
 ---
