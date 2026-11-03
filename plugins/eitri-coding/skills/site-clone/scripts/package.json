@@ -1,0 +1,9 @@
+{
+  "name": "site-clone-capture",
+  "private": true,
+  "type": "module",
+  "description": "Capture engine for the site-clone skill.",
+  "dependencies": {
+    "playwright": "^1.56.0"
+  }
+}
