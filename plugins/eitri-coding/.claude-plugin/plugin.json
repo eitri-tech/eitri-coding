@@ -10,5 +10,15 @@
   "license": "Apache-2.0",
   "homepage": "https://eitri.tech",
   "repository": "https://github.com/eitri-tech/eitri-coding",
-  "keywords": ["eitri", "luminus", "bifrost", "mobile", "webview", "android", "ios", "mcp", "site-clone"]
+  "keywords": [
+    "eitri",
+    "luminus",
+    "bifrost",
+    "mobile",
+    "webview",
+    "android",
+    "ios",
+    "mcp",
+    "site-clone"
+  ]
 }

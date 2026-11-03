@@ -28,7 +28,7 @@ Supporting signals (treat as Eitri unless the definitive check clearly says othe
 1. Treat *all* front-end / coding / build / run / device-interaction work in that directory as Eitri work, for the rest of the session — no re-asking, no per-task re-evaluation.
 2. Apply every rule below without exception (no raw HTML tags, Luminus components only, file-based routing, supported dependency versions, runtime safety, etc.).
 3. Never fall back to generic React / web / React Native practice, even when the user's request sounds generic ("add a button", "fix this screen", "run the app"). Generic advice in an Eitri project is a bug.
-4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-shopping` for commerce integration (VTEX / Wake / Shopify SDKs), `eitri-claude-design-migrate` for Claude Design ports. This skill's project-wide rules always win on conflict.
+4. Chain to the companion skills as needed: `eitri-luminus` for UI components, `eitri-bifrost` for native capabilities, `eitri-device` for anything that runs, observes or drives the app on a device/simulator, `eitri-shopping` for commerce integration (VTEX / Wake / Shopify SDKs), `eitri-claude-design-migrate` for Claude Design ports, `figma-scrape` / `figma-to-eitri` for Figma designs (URL or `.fig` file). This skill's project-wide rules always win on conflict — and the project's own `AGENTS.md` / `CLAUDE.md` win over this skill.
 
 Do not wait for the user to ask explicitly — the presence of these files is enough.
 
@@ -101,7 +101,8 @@ Use **only** these versions — no substitutions:
 
 - `eitri start` — Start the development environment with live reload
 - `eitri app start` — Start N Eitri-Apps when in a directory containing `app-config.yaml`
-- `eitri push-version` — Deploy a new version. Add `--shared` for shared-type apps. **Always increment the `version` in `eitri-app.conf.js` before running.**
+- `eitri push-version` — Deploy a new version. Add `--shared` for shared-type apps. **Always increment the `version` in `eitri-app.conf.js` before running.** After pushing a shared app, update its pinned version in the `eitri-app.conf.js` of **every** app that consumes it, not only the one you were working on. When merging branches, check the shared version wasn't already taken and bump again if it was.
+- `eitri theme sync | create | publish` — Manage the Luminus theme (see *Theme* below).
 
 ---
 
@@ -142,8 +143,22 @@ Eitri does **not** use `App.tsx`. Centralize all global state in the `providers`
 - **No HTML tags:** `div`, `span`, `img`, `p`, `button`, etc. are **strictly forbidden** — use `eitri-luminus` components only
 - **Prohibited Tailwind utilities:** Do **not** use `hover:`, `focus-within:`, `active:`, or `focus:` — these cause "stuck" states on mobile touchscreens
 - **Sizing props:** `width`, `height`, `maxWidth`, `maxHeight`, `minWidth`, and `minHeight` are valid as direct component props
-- **Default orientation** By default views are in `row` orientation. Use the `orientation` prop to switch to `column` when needed.
+- **Layout direction:** `View` is a flex container laid out as a row by default. Use Tailwind for direction and alignment (`flex-col`, `items-center`, `justify-between`). The `orientation` prop does not work in Luminus v2 — never use it, and replace it with `flex-col` / `flex-row` when you touch code that has it.
 - **Layout** Only do layout for mobile devices because Eitri apps are mobile mini-apps.
+- **Colors:** use theme classes (`bg-primary`, `text-base-content`, named colors from the theme's `extend`). An arbitrary hex (`bg-[#1E5BFF]`) is acceptable only for a true one-off and only if the project allows it; a color used in more than one place becomes a theme token first.
+- **`style` is for runtime values only.** Tailwind classes must be static strings, so a value that arrives at runtime (a color or image coming from the CMS, a computed width) cannot be a class: pass it through `style`, and only when the value exists. Everything static stays in `className`.
+- **Icons:** prefer `react-icons` (supported version) or the project's existing icon components. A raw `<svg>` is acceptable only inside a dedicated icon component (e.g. `src/components/Icons/`), never inline in a screen.
+
+### Theme
+
+The Luminus theme (Tailwind + DaisyUI) lives in the Eitri Console, not in the repo. A local `tailwind.config.js` has no effect by itself — it is only the file the CLI reads and writes:
+
+1. `eitri theme sync -y` — pull the published theme into `tailwind.config.js`.
+2. Edit the theme (`extend.colors`, DaisyUI slots, `fontFamily`).
+3. `eitri theme create` — upload it as a new DRAFT version.
+4. `eitri theme publish` — publish a DRAFT. **This changes the app for every user**; show the diff and get confirmation first.
+
+The same can be done in **Eitri Console → Design System**. Whichever channel you use, **restart the dev server** (`eitri start` / `eitri app start`) afterwards: it reads the theme at startup, and a class for a new token renders transparent, with no error, until the restart.
 
 ### Component Structure
 
@@ -232,7 +247,7 @@ Rules that follow from this:
 - **`null` ≠ `undefined` ≠ `""` ≠ `[]`.** A default parameter (`= []`) does **not** fire on `null`; only `??` covers it.
 - **One malformed item must not kill the list** — `.filter(Boolean)` and skip it.
 
-A distant second: **device-level formatting failures**. `Internal error. Icu error.` from `Number.toLocaleString` on a broken Android WebView ICU has taken carts down. Wrap `toLocaleString` / `Intl.NumberFormat` / `Intl.DateTimeFormat` in `try/catch` with a plain formatting fallback whenever they sit in a purchase path. This is a device defect, so the fallback is the only defense — and it is the **only** case where wrapping render code in `try/catch` is right.
+A distant second: **device-level formatting failures**. `Internal error. Icu error.` from `Number.toLocaleString` on a broken Android WebView ICU has taken carts down. Wrap `toLocaleString` / `toLocaleDateString` / `Intl.NumberFormat` / `Intl.DateTimeFormat` in `try/catch` with a plain formatting fallback (or build the string from parts / use `dayjs`) wherever they feed rendering — dates included, purchase path first. This is a device defect, so the fallback is the only defense — and it is the **only** case where wrapping render code in `try/catch` is right.
 
 Crashes concentrate on Android WebView. If something depends on a recent browser API, assume an old WebView; iOS being absent from a dump is not evidence it is healthy.
 

@@ -7,6 +7,7 @@
  * named styles, variables, image exports, and copy.
  *
  * Requires Node 18+ (built-in fetch). No npm dependencies.
+ * For a local .fig file use fig-extract.mjs, which writes the same bundle.
  *
  * Usage: node extract.mjs <figma-url> [options]   (--help for all flags)
  */
@@ -14,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
+import { mk, wj, wt, extractTokens, buildTree, copyMarkdown, listFrames, generateReadme } from './lib/bundle.mjs'
 
 /* ------------------------------------------------------------------ args -- */
 
@@ -54,9 +56,6 @@ if (!TOKEN) {
 
 /* --------------------------------------------------------------- helpers -- */
 
-const mk   = d  => fs.mkdirSync(d, { recursive: true })
-const wj   = (f, o) => { mk(path.dirname(f)); fs.writeFileSync(f, JSON.stringify(o, null, 2)) }
-const wt   = (f, s) => { mk(path.dirname(f)); fs.writeFileSync(f, s) }
 const log  = (...a) => console.log(' ·', ...a)
 const warn = msg => { warnings.push(msg); console.warn(' ⚠', msg) }
 
@@ -106,143 +105,6 @@ async function downloadTo(url, dest) {
   await pipeline(res.body, createWriteStream(dest))
 }
 
-/* -------------------------------------------------------- token extraction -- */
-
-function toHex(r, g, b) {
-  return '#' + [r, g, b].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')
-}
-
-function extractTokens(root) {
-  const colors   = new Map()
-  const fonts    = new Map()
-  const spacing  = new Set()
-  const radii    = new Set()
-
-  function walk(n) {
-    ;(n.fills || []).forEach(f => {
-      if (f.type === 'SOLID' && f.color) {
-        const hex = toHex(f.color.r, f.color.g, f.color.b)
-        const opacity = f.opacity !== undefined ? Math.round(f.opacity * 100) / 100 : 1
-        const key = opacity < 1 ? `${hex}@${opacity}` : hex
-        const entry = colors.get(key) || { hex, opacity, count: 0, seenIn: [] }
-        entry.count++
-        if (n.name && !entry.seenIn.includes(n.name)) entry.seenIn.push(n.name)
-        colors.set(key, entry)
-      }
-    })
-    ;(n.strokes || []).forEach(f => {
-      if (f.type === 'SOLID' && f.color) {
-        const hex = toHex(f.color.r, f.color.g, f.color.b)
-        if (!colors.has(hex)) colors.set(hex, { hex, opacity: 1, count: 0, seenIn: [] })
-        colors.get(hex).count++
-      }
-    })
-    if (n.type === 'TEXT' && n.style) {
-      const s = n.style
-      const key = `${s.fontFamily}/${s.fontWeight}/${Math.round(s.fontSize)}`
-      const entry = fonts.get(key) || {
-        family: s.fontFamily,
-        weight: s.fontWeight,
-        size: Math.round(s.fontSize),
-        lineHeightPx: s.lineHeightPx ? Math.round(s.lineHeightPx) : null,
-        letterSpacing: s.letterSpacing || 0,
-        textCase: s.textCase || null,
-        count: 0,
-      }
-      entry.count++
-      fonts.set(key, entry)
-    }
-    if (n.layoutMode) {
-      ;['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom', 'itemSpacing'].forEach(p => {
-        if (n[p] != null && n[p] > 0) spacing.add(n[p])
-      })
-    }
-    if (n.cornerRadius > 0) radii.add(n.cornerRadius)
-    ;(n.rectangleCornerRadii || []).forEach(r => r > 0 && radii.add(r))
-    ;(n.children || []).forEach(walk)
-  }
-  walk(root)
-
-  return {
-    colors:     [...colors.values()].sort((a, b) => b.count - a.count),
-    typography: [...fonts.values()].sort((a, b) => b.count - a.count),
-    spacing:    [...spacing].sort((a, b) => a - b),
-    radii:      [...radii].sort((a, b) => a - b),
-  }
-}
-
-/* ---------------------------------------------------------- simplified tree -- */
-
-function buildTree(n, depth = 0) {
-  const out = { id: n.id, name: n.name, type: n.type }
-
-  if (n.absoluteBoundingBox) {
-    const b = n.absoluteBoundingBox
-    out.box = [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]
-  }
-
-  if (n.opacity !== undefined && n.opacity < 1) out.opacity = n.opacity
-  if (n.visible === false) out.hidden = true
-
-  const fill = (n.fills || []).find(f => f.type === 'SOLID' && f.color)
-  if (fill) out.fill = toHex(fill.color.r, fill.color.g, fill.color.b)
-
-  if (n.type === 'TEXT') {
-    out.text = n.characters
-    if (n.style) {
-      out.font = {
-        family: n.style.fontFamily,
-        size:   Math.round(n.style.fontSize),
-        weight: n.style.fontWeight,
-      }
-      if (n.style.lineHeightPx) out.font.lineHeightPx = Math.round(n.style.lineHeightPx)
-    }
-  }
-
-  if (n.layoutMode) {
-    out.layout = {
-      mode:       n.layoutMode,
-      gap:        n.itemSpacing || 0,
-      padding:    [n.paddingTop || 0, n.paddingRight || 0, n.paddingBottom || 0, n.paddingLeft || 0],
-      align:      n.primaryAxisAlignItems,
-      crossAlign: n.counterAxisAlignItems,
-      wrap:       n.layoutWrap || null,
-    }
-  }
-
-  if (n.componentId)    out.componentId    = n.componentId
-  if (n.componentSetId) out.componentSetId = n.componentSetId
-  if (n.styles)         out.styleRefs      = n.styles
-
-  if (n.children) {
-    if (depth < MAX_DEPTH) {
-      out.children = n.children.map(c => buildTree(c, depth + 1))
-    } else {
-      out.childCount = n.children.length
-    }
-  }
-
-  return out
-}
-
-/* ------------------------------------------------------------- text extract -- */
-
-function extractText(root) {
-  const sections = []
-
-  function walk(n, sectionName) {
-    if (n.type === 'TEXT' && n.characters) {
-      let sec = sections.find(s => s.name === sectionName)
-      if (!sec) { sec = { name: sectionName, texts: [] }; sections.push(sec) }
-      sec.texts.push(n.characters.trim())
-    }
-    const next = ['FRAME', 'COMPONENT', 'COMPONENT_SET'].includes(n.type) ? n.name : sectionName
-    ;(n.children || []).forEach(c => walk(c, next))
-  }
-  walk(root, root.name)
-  return sections
-}
-
 /* ------------------------------------------------------------ frame collect -- */
 
 function collectExportIds(root) {
@@ -251,84 +113,6 @@ function collectExportIds(root) {
     .filter(c => ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'GROUP'].includes(c.type))
     .forEach(c => ids.push(c.id))
   return ids
-}
-
-/* ------------------------------------------------------------------ readme -- */
-
-function generateReadme({ slug, FIGMA_URL, fileKey, nodeId, root, tokens, frames, styleCount, date }) {
-  const colorRows = tokens.colors.slice(0, 12).map(c =>
-    `| \`${c.hex}\` | ${c.opacity < 1 ? c.opacity : '—'} | ${c.count} | ${c.seenIn.slice(0, 2).join(', ')} |`
-  ).join('\n')
-
-  const typeRows = tokens.typography.slice(0, 10).map(t =>
-    `| ${t.family} | ${t.weight} | ${t.size}px | ${t.lineHeightPx ? t.lineHeightPx + 'px' : '—'} | ${t.count} |`
-  ).join('\n')
-
-  const frameRows = frames.map(f =>
-    `| ${f.name} | ${f.type} | ${f.width} × ${f.height} |`
-  ).join('\n')
-
-  const warnBlock = warnings.length
-    ? `\n## Warnings\n\n${warnings.map(w => `- ${w}`).join('\n')}\n`
-    : ''
-
-  return `# ${root.name}
-
-Figma scrape · ${date}
-Source: ${FIGMA_URL}
-File: \`${fileKey}\` · Node: \`${nodeId || 'root'}\`
-${warnBlock}
-## Summary
-
-**Type**: ${root.type}
-**Top-level children**: ${root.children?.length || 0}
-**Named styles in file**: ${styleCount}
-**Exportable frames**: ${frames.length}
-
-## Files
-
-| File | Contents |
-|---|---|
-| \`node.json\` | Raw Figma API node data |
-| \`design/tokens.json\` | Colors, typography, spacing, radii |
-| \`design/styles.json\` | Named styles (fill, text, effect, grid) |
-| \`design/variables.json\` | Variable collections (Pro/Org) |
-| \`layout/tree.json\` | Simplified node tree |
-| \`layout/frames.json\` | Top-level frame summary |
-| \`content/copy.md\` | All text content |
-| \`assets/images/\` | PNG exports at ${SCALE}× |
-| \`assets/vectors/\` | SVG exports |
-| \`assets/fills.json\` | Image fill URLs |
-
-## Frames
-
-| Name | Type | Size |
-|---|---|---|
-${frameRows || '(none)'}
-
-## Color palette (top ${Math.min(12, tokens.colors.length)})
-
-| Hex | Opacity | Uses | Context |
-|---|---|---|---|
-${colorRows || '(none found)'}
-
-Spacing scale: \`${tokens.spacing.join('  ')}\`
-Border radii: \`${tokens.radii.join('  ')}\`
-
-## Typography (top ${Math.min(10, tokens.typography.length)})
-
-| Family | Weight | Size | Line height | Uses |
-|---|---|---|---|---|
-${typeRows || '(none found)'}
-
-## How to use
-
-1. **Tokens** → \`design/tokens.json\` : map colors/type/spacing to your theme layer before writing any component
-2. **Structure** → \`layout/tree.json\` : component hierarchy, auto-layout config, bounding boxes
-3. **Copy** → \`content/copy.md\` : use verbatim — do not paraphrase unless asked
-4. **Images** → \`assets/images/\` : pixel-truth reference for your rebuild; never ship these as implementation
-5. **Variables** → \`design/variables.json\` : prefer these over raw tokens if populated
-`
 }
 
 /* ------------------------------------------------------------------- main -- */
@@ -403,27 +187,16 @@ async function main() {
 
   /* 5 — simplified tree + frames --------------------------------------- */
   log('Building layout tree...')
-  const tree = buildTree(root)
+  const tree = buildTree(root, MAX_DEPTH)
   wj(path.join(outDir, 'layout/tree.json'), tree)
-  const frames = (root.children || [])
-    .filter(c => ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'GROUP'].includes(c.type))
-    .map(f => ({
-      id:     f.id,
-      name:   f.name,
-      type:   f.type,
-      width:  Math.round(f.absoluteBoundingBox?.width  || 0),
-      height: Math.round(f.absoluteBoundingBox?.height || 0),
-    }))
+  const frames = listFrames(root)
   wj(path.join(outDir, 'layout/frames.json'), frames)
   log(`layout/tree.json  layout/frames.json  (${frames.length} frames)`)
 
   /* 6 — text content ---------------------------------------------------- */
   log('Extracting text...')
-  const sections = extractText(root)
-  const copyMd = `# ${root.name}\n\n` +
-    sections.map(s => `## ${s.name}\n\n${s.texts.join('\n\n')}`).join('\n\n---\n\n')
+  const { md: copyMd, count: textCount } = copyMarkdown(root)
   wt(path.join(outDir, 'content/copy.md'), copyMd)
-  const textCount = sections.reduce((n, s) => n + s.texts.length, 0)
   log(`content/copy.md  (${textCount} text nodes)`)
 
   /* 7 — image exports --------------------------------------------------- */
@@ -482,7 +255,22 @@ async function main() {
 
   /* 9 — README ---------------------------------------------------------- */
   log('Generating README...')
-  const readme = generateReadme({ slug, FIGMA_URL, fileKey, nodeId, root, tokens, frames, styleCount, date })
+  const readme = generateReadme({
+    header: `Figma scrape · ${date}\nSource: ${FIGMA_URL}\nFile: \`${fileKey}\` · Node: \`${nodeId || 'root'}\``,
+    warnings, root, tokens, frames, styleCount,
+    fileRows: [
+      ['node.json', 'Raw Figma API node data'],
+      ['design/tokens.json', 'Colors, typography, spacing, radii'],
+      ['design/styles.json', 'Named styles (fill, text, effect, grid)'],
+      ['design/variables.json', 'Variable collections (Pro/Org)'],
+      ['layout/tree.json', 'Simplified node tree'],
+      ['layout/frames.json', 'Top-level frame summary'],
+      ['content/copy.md', 'All text content'],
+      ['assets/images/', `PNG exports at ${SCALE}×`],
+      ['assets/vectors/', 'SVG exports'],
+      ['assets/fills.json', 'Image fill URLs'],
+    ],
+  })
   wt(path.join(outDir, 'README.md'), readme)
   log('README.md')
 

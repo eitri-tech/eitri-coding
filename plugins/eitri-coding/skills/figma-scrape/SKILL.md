@@ -1,6 +1,6 @@
 ---
 name: figma-scrape
-description: Extract a Figma selection from a URL into a structured design bundle. Use whenever the user provides a figma.com URL with a node-id. Ask which view/screen this is, then run the extract.mjs script using $FIGMA_TOKEN from the environment — no token prompts, no Puppeteer, no Figma MCP.
+description: Extract a Figma selection from a URL into a structured design bundle. Use whenever the user provides a figma.com URL with a node-id. Ask which view/screen this is, then run the extract.mjs script using $FIGMA_TOKEN from the environment — no token prompts, no Puppeteer, no Figma MCP. For a local `.fig` file, fig-extract.mjs writes the same bundle offline (see figma-to-eitri).
 ---
 
 # figma-scrape
@@ -37,7 +37,7 @@ Wait for the answer. Use the answer as the `<view>` name, slugified (lowercase, 
 ## Step 3 — Run the extraction script
 
 ```bash
-node ~/.claude/skills/figma-scrape/scripts/extract.mjs \
+node ~/.claude/plugins/marketplaces/eitri-plugins/plugins/eitri-coding/skills/figma-scrape/scripts/extract.mjs \
   "<figma-url>" \
   --out "figma/<project>" \
   --name "<view>"
@@ -70,6 +70,12 @@ Read `figma/<project>/<view>/README.md` — generated index with design summary.
 | `Variables not available` | Normal for Free plan — bundle is still complete without variables |
 
 **Do not present options to the user. Do not ask for tokens. Fix the error and re-run.**
+
+---
+
+## Local `.fig` file instead of a URL
+
+`scripts/fig-extract.mjs` reads a `.fig` (Figma → File → Save local copy) and writes the same bundle without token or network: `--list` shows pages/sections/frames with ids, `--node <id> --out figma/<project> --name <view>` extracts one. The figma-to-eitri skill documents the flow and the bundle differences.
 
 ---
 
