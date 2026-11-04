@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "eitri-manager": {
+      "type": "http",
+      "url": "https://api.eitri.tech/eitri-manager-mcp/mcp"
+    }
+  }
+}

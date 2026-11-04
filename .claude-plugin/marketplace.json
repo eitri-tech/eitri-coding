@@ -1,5 +1,7 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "eitri-plugins",
+  "description": "Official Eitri plugins for AI coding agents",
   "owner": {
     "name": "Eitri",
     "url": "https://eitri.tech"
@@ -8,7 +10,10 @@
     {
       "name": "eitri-coding",
       "source": "./plugins/eitri-coding",
-      "description": "Eitri Expert Front-End Developer — builds mobile-first web apps with Luminus + Bifrost and interacts with Android devices via ADB. Use this plugin to create, debug, and optimize eitri-apps, ensuring they are performant and user-friendly. Ideal for developing responsive web applications and managing Android device interactions."
+      "description": "Eitri Expert Front-End Developer — builds mobile-first Eitri-Apps with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, and clones live websites into Eitri views.",
+      "category": "development",
+      "tags": ["eitri", "mobile", "frontend", "mcp"],
+      "homepage": "https://eitri.tech"
     }
   ]
 }

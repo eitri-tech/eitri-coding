@@ -1,0 +1,10 @@
+{
+  "name": "figma-scrape-extract",
+  "private": true,
+  "type": "module",
+  "description": "Full extraction engine for the figma-scrape skill. Requires Node 18+ (built-in fetch).",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,20 @@
+{
+  "name": "eitri-plugins",
+  "interface": {
+    "displayName": "Eitri Plugins"
+  },
+  "plugins": [
+    {
+      "name": "eitri-coding",
+      "source": {
+        "source": "local",
+        "path": "./plugins/eitri-coding"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
