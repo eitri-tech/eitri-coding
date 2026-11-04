@@ -104,6 +104,10 @@ Use **only** these versions — no substitutions:
 - `eitri push-version` — Deploy a new version. Add `--shared` for shared-type apps. **Always increment the `version` in `eitri-app.conf.js` before running.** After pushing a shared app, update its pinned version in the `eitri-app.conf.js` of **every** app that consumes it, not only the one you were working on. When merging branches, check the shared version wasn't already taken and bump again if it was.
 - `eitri theme sync | create | publish` — Manage the Luminus theme (see *Theme* below).
 
+### Version Bump Reminder
+
+**After completing any coding task — and again before creating or updating a pull request** — chain to the `eitri-version-bump` skill to remind the user about incrementing the version. This is mandatory — forgetting to bump causes deploy failures and version conflicts. The companion skill offers an automated Python script that handles patch/minor/major bumps in `eitri-app.conf.js`.
+
 ---
 
 ## File-Based Routing & Parameters
