@@ -100,6 +100,7 @@ When active, Claude operates as a Senior Eitri Expert Front-End Developer with k
 - **Runtime safety** — defensive code by default, since a `TypeError` in a WebView blanks the screen instead of failing the build
 - **Eitri Manager MCP** — bundled remote MCP server for managing your Eitri apps (OAuth login via `/mcp`)
 - **Site cloning** (`site-clone` skill) — captures a live URL with Playwright and rebuilds it in the project's framework (Eitri, FastStore, or generic React). Needs Node.js; first run installs Playwright and Chromium
+- **App icon check & build** (`mobile-icon` skill) — tells whether an SVG/PNG works as an iOS and Android app icon (alpha, size, adaptive-icon safe zone, contrast, and an SVG path/stroke/transform lint), then generates the iOS 1024 PNG, Android adaptive layers (foreground, monochrome, background), the Play Store icon and a preview sheet. Pure Node; SVG pixel checks use resvg, rsvg-convert, Inkscape or ImageMagick if installed. Also guides Material You themed icons and iOS 26 Liquid Glass
 - **Device automation** (`eitri-device` skill) — screenshot, tap, swipe, type, native tab switching, and live DOM / console inspection of the Eitri WebView, on Android (ADB + Chrome DevTools Protocol) and the iOS Simulator (idb + WebKit Inspector)
 
 Each capability is a separate skill; `eitri-specialist` is the entry point and chains to the others.
@@ -127,6 +128,9 @@ plugins/eitri-coding/
     site-clone/                  # Live website → rebuild in the project's framework
       scripts/                   # Playwright capture (scrape.mjs) and screenshot (shot.mjs)
       references/                # Rebuild loop + per-framework adapters
+    mobile-icon/                 # App icon check + build (iOS / Android)
+      scripts/                   # check.mjs (analyzer), build.mjs (asset generator), lib/
+      references/                # Platform specs, SVG path rules, Material You / Liquid Glass
     eitri-device/                # Device & simulator automation
       tools/
         android.py               # ADB + Chrome DevTools Protocol
