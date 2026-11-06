@@ -100,6 +100,7 @@ When active, Claude operates as a Senior Eitri Expert Front-End Developer with k
 - **Runtime safety** — defensive code by default, since a `TypeError` in a WebView blanks the screen instead of failing the build
 - **Eitri Manager MCP** — bundled remote MCP server for managing your Eitri apps (OAuth login via `/mcp`)
 - **Site cloning** (`site-clone` skill) — captures a live URL with Playwright and rebuilds it in the project's framework (Eitri, FastStore, or generic React). Needs Node.js; first run installs Playwright and Chromium
+- **Shared-bump awareness** (`eitri-shared-bump` skill) — before a bump of `eitri-shopping-*-shared` (or a sibling shared folder of the workspace), reports what was fixed, added, broken, which new remote-config keys are needed and known issues, rebuilt from git since the shared repo has no changelog. Hooks trigger it when pins are outdated, when a pin is edited and when a task ends with a pin changed. Needs Node.js and git
 - **Device automation** (`eitri-device` skill) — screenshot, tap, swipe, type, native tab switching, and live DOM / console inspection of the Eitri WebView, on Android (ADB + Chrome DevTools Protocol) and the iOS Simulator (idb + WebKit Inspector)
 
 Each capability is a separate skill; `eitri-specialist` is the entry point and chains to the others.
@@ -116,12 +117,14 @@ plugins/eitri-coding/
   .mcp.json                      # Eitri Manager MCP server (Claude Code)
   plugin.json                    # Agent Plugins v1 manifest (Codex, Hermes)
   mcp.json                       # Eitri Manager MCP server (Agent Plugins v1)
-  hooks/                         # Loads the specialist skill on coding prompts in an Eitri project
+  hooks/                         # Loads the specialist skill in an Eitri project; shared-bump awareness (SessionStart/PostToolUse/Stop)
   skills/
     eitri-specialist/            # Entry point: project rules, routing, runtime safety
     eitri-luminus/               # Luminus UI component reference
     eitri-bifrost/               # Bifrost native API reference
     eitri-shopping/              # Eitri Shopping bundles (multi-app e-commerce)
+    eitri-shared-bump/           # Changelog + impact report for shared-library bumps
+      scripts/                   # shared-changes.mjs (pins vs latest, changelog from git, hook entry)
     eitri-typescript-migrate/    # JS→TS migration for an existing Eitri-App workspace
     eitri-claude-design-migrate/ # Claude Design → Eitri porting
     site-clone/                  # Live website → rebuild in the project's framework
