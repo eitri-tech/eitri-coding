@@ -172,7 +172,7 @@ Reach for the raw `http` / `graphQl` namespace only for endpoints the SDK does n
 
 **Is the bug mine or the SDK's?** Read the pinned version's source first. These libraries have shipped real integration defects — auth-scheme changes, headers assembled wrongly for one operation — that no app-side change can fix. `git log` on the file usually settles it, and the fix is a version bump, not a workaround.
 
-**Bumping is a deliberate change.** Update the pin in `eitri-app-dependencies`, bump your own app's `version` too, and read the diff between the two SDK versions: releases mix unrelated work (payment changes, config sources moving, a search engine swap), each with its own risk. Move to the version that fixes your problem, not to the newest.
+**Bumping is a deliberate change.** Before touching the pin, run the `eitri-shared-bump` skill: it rebuilds the changelog between your pin and the target (fixed / added / breaking / new remote-config keys / known issues) and shows the impact on this project. Then update the pin in `eitri-app-dependencies`, bump your own app's `version` too, and read the diff between the two SDK versions: releases mix unrelated work (payment changes, config sources moving, a search engine swap), each with its own risk. Move to the version that fixes your problem, not to the newest.
 
 **Contributing to an SDK.** Add the method to the right domain sub-service, expose it through the facade namespace if it is a new area, and respect the release order — shared libraries publish first (`--shared`), then consumers update the pin and bump. The monorepo publishes a subdirectory only when its `version` changed.
 
