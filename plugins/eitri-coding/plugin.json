@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "eitri-coding",
-  "version": "1.7.0",
-  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, and clones live websites into Eitri views",
+  "version": "1.8.0",
+  "description": "Eitri Specialist — builds mobile apps using Eitri with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, clones live websites into Eitri views, and checks/builds app icons for iOS and Android",
   "author": {
     "name": "Eitri",
     "url": "https://eitri.tech"
@@ -10,7 +10,7 @@
   "homepage": "https://eitri.tech",
   "repository": "https://github.com/eitri-tech/eitri-coding",
   "license": "Apache-2.0",
-  "keywords": ["eitri", "luminus", "bifrost", "mobile", "webview", "android", "ios", "mcp", "site-clone"],
+  "keywords": ["eitri", "luminus", "bifrost", "mobile", "webview", "android", "ios", "mcp", "site-clone", "app-icon"],
   "extensions": {
     "com.openai": {
       "interface": {
