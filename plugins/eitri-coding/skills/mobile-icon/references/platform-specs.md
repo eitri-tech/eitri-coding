@@ -9,7 +9,7 @@ What `check.mjs` verifies and why. Store requirements change; confirm against th
 | Marketing icon size | exactly **1024×1024 px** PNG | `ios-size` |
 | Alpha | **no transparency and no alpha channel** (even fully opaque pixels in an RGBA file are rejected) | `ios-alpha`, `ios-needs-background` |
 | Shape | **square, full-bleed**; the system applies the rounded-rectangle (squircle) mask. Never pre-round | `ios-rounded` |
-| Color space | sRGB, or Display P3 for wide gamut | `png-profile` |
+| Color space | sRGB (Display P3 is allowed by Apple for wide gamut, but the scripts here do not convert profiles: `check.mjs` warns on any non-sRGB profile and `build.mjs` refuses such a PNG unless `--assume-srgb`) | `png-profile` |
 | Margins | keep the glyph out of the outer ~5–10%; mask and glow crowd edges | `ios-tight`, `ios-small` |
 | Appearances (iOS 18+) | default, **dark**, **tinted** variants; tinted converts the icon to a single hue, so luminance contrast carries the design | `contrast` |
 | iOS 26 | layered icon authored in **Icon Composer** (`.icon`); the system renders **Liquid Glass** — translucency, specular highlights, blur, depth — in default/dark/clear/tinted | `baked-shadow`, see `modern-icons.md` |

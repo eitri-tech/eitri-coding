@@ -2,7 +2,7 @@
 // mobile-icon build — turn a logo (SVG or PNG) into store-ready icon assets.
 //
 //   node build.mjs <logo.svg|logo.png> [--out dir] [--bg "#RRGGBB"] [--ios-fill 0.6] [--android-fill 0.9]
-//                  [--renderer resvg|rsvg-convert|inkscape|magick]
+//                  [--renderer resvg|rsvg-convert|inkscape|magick] [--assume-srgb]
 //
 // With a transparent logo it writes:
 //   ios/AppIcon-1024.png            opaque RGB (no alpha channel) — the App Store marketing icon
@@ -19,7 +19,7 @@ import { renderSvg, toPng } from './lib/render.mjs';
 import { measure, ANDROID } from './lib/analyze.mjs';
 import { makePreview } from './lib/preview.mjs';
 
-const USAGE = 'Usage: node build.mjs <logo.svg|logo.png> [--out dir] [--bg "#RRGGBB"] [--ios-fill 0.6] [--android-fill 0.9] [--renderer name]';
+const USAGE = 'Usage: node build.mjs <logo.svg|logo.png> [--out dir] [--bg "#RRGGBB"] [--ios-fill 0.6] [--android-fill 0.9] [--renderer name] [--assume-srgb]';
 const fail = (m) => {
   console.error(`error: ${m}\n${USAGE}`);
   process.exit(2);
@@ -29,7 +29,8 @@ const o = { out: 'mobile-icon-out', iosFill: '0.6', androidFill: '0.9' };
 const rest = [];
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i].startsWith('--')) {
+  if (argv[i] === '--assume-srgb') o.assumeSrgb = true;
+  else if (argv[i].startsWith('--')) {
     const k = argv[i].slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (argv[i + 1] === undefined) fail(`${argv[i]} needs a value`);
     o[k] = argv[++i];
@@ -61,6 +62,11 @@ if (extname(file).toLowerCase() === '.svg' || /<svg[\s>]/i.test(head)) {
   img = decodePng(r.png);
 } else if (isPng(bytes)) {
   img = decodePng(bytes);
+  // The outputs are tagged sRGB without converting pixels, so a source in another profile (Display P3, …) would shift colors.
+  const prof = img.meta?.iccProfile;
+  if (prof && !/srgb/i.test(prof) && !o.assumeSrgb) {
+    fail(`the PNG embeds the color profile "${prof}", and this script does not convert colors (it would tag the same values as sRGB and shift them). Convert the source to sRGB first (e.g. magick in.png -colorspace sRGB -strip out.png), or pass --assume-srgb if the values are already sRGB.`);
+  }
 } else {
   const c = toPng(file);
   if (c.error) fail(c.error);

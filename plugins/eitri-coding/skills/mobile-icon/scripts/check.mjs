@@ -113,8 +113,8 @@ if (looksSvg) {
 if (format === 'png' && img.meta) {
   if (img.meta.interlaced) findings.push({ level: 'info', target: 'both', id: 'png-interlaced', msg: 'PNG is interlaced.', fix: 'Not a problem, but non-interlaced is the norm for icons.' });
   if (img.meta.depth === 16) findings.push({ level: 'info', target: 'both', id: 'png-16bit', msg: '16-bit PNG.', fix: '8 bits per channel is all stores need.' });
-  if (img.meta.iccProfile && !/srgb|display p3|p3/i.test(img.meta.iccProfile)) {
-    findings.push({ level: 'warn', target: 'ios', id: 'png-profile', msg: `Embedded color profile "${img.meta.iccProfile}" is neither sRGB nor Display P3; colors may shift.`, fix: 'Convert to sRGB (or Display P3) before export.' });
+  if (img.meta.iccProfile && !/srgb/i.test(img.meta.iccProfile)) {
+    findings.push({ level: 'warn', target: 'ios', id: 'png-profile', msg: `Embedded color profile "${img.meta.iccProfile}" is not sRGB; colors may shift, and build.mjs does not convert profiles (it would relabel the values as sRGB).`, fix: 'Convert to sRGB before export (build.mjs refuses such a source unless --assume-srgb).' });
   }
 }
 
