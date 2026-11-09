@@ -316,7 +316,7 @@ function commitsBetween(ctx, from, to, dirPrefix) {
 	return commits
 }
 
-function changelog(ctx, prefix, libName, pinned, target, { headRef, light = false } = {}) {
+function changelog(ctx, prefix, libName, pinned, target, { headRef, light = false, latest = target } = {}) {
 	const anchors = makeAnchors(ctx, prefix, libName, headRef)
 	const from = anchors.resolve(pinned)
 	const to = anchors.resolve(target)
@@ -334,7 +334,10 @@ function changelog(ctx, prefix, libName, pinned, target, { headRef, light = fals
 
 	res.exportDiff = ['src/export.js', 'src/export.ts'].map(f => `git diff ${from.sha.slice(0, 10)} ${to.sha.slice(0, 10)} -- ${prefix}${f}`)
 	res.releases = releasesIn(ctx, prefix, libName, anchors, pinned, target)
-	const un = git(['log', '--format=%h %ad %s', '--date=short', `${to.sha}..${headRef}`, '--', prefix || '.'], ctx)
+	// "unreleased" = after the LATEST release, not after the target: releases between target and
+	// latest are published (they belong in `skipped`).
+	const latestAnchor = latest === target ? to : anchors.resolve(latest)
+	const un = git(['log', '--format=%h %ad %s', '--date=short', `${(latestAnchor || to).sha}..${headRef}`, '--', prefix || '.'], ctx)
 	res.unreleased = (un || '').split('\n').filter(Boolean).slice(0, 20)
 	return res
 }
@@ -449,11 +452,17 @@ function baseRef(repo) {
 
 function pinsChanged(start) {
 	const { root, apps } = discoverApps(start)
-	const top = git(['rev-parse', '--show-toplevel'], { dir: root })?.trim()
-	if (!top) return { root, changes: [] }
-	const { ref: base, resolved: baseResolved } = baseRef(top)
+	// Each app is compared against ITS OWN repository: a workspace may be one repo, or a plain
+	// folder holding independently cloned app repos (then the root is not a repo at all).
+	const repos = new Map() // toplevel -> { ref, resolved }
 	const byLib = new Map()
+	let anyRepo = false
 	for (const app of apps) {
+		const top = git(['rev-parse', '--show-toplevel'], { dir: app.dir })?.trim()
+		if (!top) continue
+		anyRepo = true
+		if (!repos.has(top)) repos.set(top, baseRef(top))
+		const { ref: base } = repos.get(top)
 		const rel = path.relative(top, app.file).split(path.sep).join('/')
 		const before = sharedDeps(evalConf(git(['show', `${base}:${rel}`], { dir: top })))
 		const now = sharedDeps(app.conf)
@@ -467,11 +476,15 @@ function pinsChanged(start) {
 		}
 	}
 	const changes = [...byLib.values()].map(e => ({ lib: e.lib, from: uniqSorted(e.from), to: uniqSorted(e.to), apps: e.apps }))
+	const unresolved = [...repos].filter(([, b]) => !b.resolved).map(([top]) => top)
+	const warnings = []
+	if (!anyRepo) warnings.push('None of the apps is inside a git repository: pin changes cannot be detected.')
+	if (unresolved.length) warnings.push(`No default branch found for ${unresolved.join(', ')} (use --base <ref>): only uncommitted pin changes are detected there; committed bumps on the branch are not.`)
 	return {
 		root,
-		base: base.slice(0, 10),
-		baseResolved,
-		...(baseResolved ? {} : { warning: 'No default branch found (use --base <ref>): only uncommitted pin changes are detected; committed bumps on this branch are not.' }),
+		bases: Object.fromEntries([...repos].map(([top, b]) => [top, b.resolved ? b.ref.slice(0, 10) : null])),
+		baseResolved: anyRepo && unresolved.length === 0,
+		...(warnings.length ? { warning: warnings.join(' ') } : {}),
 		changes
 	}
 }
@@ -528,7 +541,7 @@ async function report(start) {
 					const md = git(['show', `HEAD:${pfx}CHANGELOG.md`], { dir: repo })
 					if (md) entry.changelogMd = md.slice(0, 20000)
 					if (cmpVer(from, target) < 0) {
-						entry.changelog = changelog({ dir: repo }, pfx, l.name, from, target, { headRef: 'HEAD' })
+						entry.changelog = changelog({ dir: repo }, pfx, l.name, from, target, { headRef: 'HEAD', latest: entry.latest })
 						if (cmpVer(target, entry.latest) < 0) entry.skipped = changelog({ dir: repo }, pfx, l.name, target, entry.latest, { headRef: 'HEAD', light: true })
 					}
 				}
@@ -549,7 +562,7 @@ async function report(start) {
 					const md = git(['show', `main:${l.name}/CHANGELOG.md`], { gitDir })
 					if (md) entry.changelogMd = md.slice(0, 20000)
 					if (cmpVer(from, target) < 0) {
-						entry.changelog = changelog({ gitDir }, `${l.name}/`, l.name, from, target, { headRef: 'main' })
+						entry.changelog = changelog({ gitDir }, `${l.name}/`, l.name, from, target, { headRef: 'main', latest: entry.latest })
 						if (cmpVer(target, entry.latest) < 0) entry.skipped = changelog({ gitDir }, `${l.name}/`, l.name, target, entry.latest, { headRef: 'main', light: true })
 					}
 				}
