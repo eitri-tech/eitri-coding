@@ -8,8 +8,8 @@
 // Exit code: 0 = no blocking problem, 1 = at least one error, 2 = bad usage / unreadable file,
 // 3 = incomplete (the SVG could not be rendered, so pixel checks did not run).
 
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
-import { extname, resolve } from 'node:path';
+import { readFileSync, writeFileSync, statSync, mkdirSync } from 'node:fs';
+import { dirname, extname, resolve } from 'node:path';
 import { decodePng, encodePng, isPng, parseHex } from './lib/png.mjs';
 import { lintSvg } from './lib/svg.mjs';
 import { renderSvg, toPng, findRenderers } from './lib/render.mjs';
@@ -38,6 +38,13 @@ function args(argv) {
 function fail(msg) {
   console.error(`error: ${msg}\n${USAGE}`);
   process.exit(2);
+}
+
+// write a file, creating its folder first (the docs point --preview/--render-out at a not-yet-existing out dir)
+function writeOut(path, data) {
+  const p = resolve(path);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, data);
 }
 
 const opts = args(process.argv.slice(2));
@@ -84,7 +91,7 @@ if (looksSvg) {
     } else {
       img = decodePng(r.png);
       notes.push(`Rendered with ${r.renderer}${r.approximate ? ' (approximate renderer — install resvg or librsvg for exact output; judge colors/edges visually)' : ''} at 1024px.`);
-      if (opts.renderOut) writeFileSync(resolve(opts.renderOut), r.png);
+      if (opts.renderOut) writeOut(opts.renderOut, r.png);
     }
   }
 } else if (isPng(bytes)) {
@@ -99,6 +106,7 @@ if (looksSvg) {
   const c = toPng(file);
   if (c.error) fail(c.error);
   img = decodePng(c.png);
+  img.hasAlphaChannel = false; // the converted PNG always has one; the original JPG/WebP/… is judged by its real pixels
   findings.push({ level: 'warn', target: 'both', id: 'not-png', msg: `File is not a PNG (${extname(file) || 'unknown type'}); stores and asset catalogs want PNG (or SVG as the source).`, fix: 'Export a 1024×1024 PNG or provide the SVG.' });
 }
 
@@ -136,7 +144,7 @@ if (img) {
   if (opts.preview) {
     const bgRgb = opts.bg ? parseHex(opts.bg) : metrics.mode === 'transparent' ? (metrics.contrast.onWhite >= metrics.contrast.onBlack ? [255, 255, 255] : [20, 20, 22]) : null;
     const sheet = makePreview(img, { bg: bgRgb });
-    writeFileSync(resolve(opts.preview), encodePng(sheet.w, sheet.h, sheet.rgba, { alpha: false }));
+    writeOut(opts.preview, encodePng(sheet.w, sheet.h, sheet.rgba, { alpha: false }));
     notes.push(`Preview sheet written to ${resolve(opts.preview)}${metrics.mode === 'transparent' && !opts.bg ? ` (transparent artwork shown on ${bgRgb[0] > 128 ? 'white' : 'near-black'}; pass --bg to try your brand color)` : ''}.`);
   }
 }

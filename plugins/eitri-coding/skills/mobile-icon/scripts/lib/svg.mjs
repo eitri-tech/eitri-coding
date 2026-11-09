@@ -499,7 +499,8 @@ export function lintSvg(xml) {
     } else if (!tr) grow(shapePoints(node));
   }
 
-  if (!drawn.length && !alreadyExplained(findings)) {
+  // <use> instances draw content that lives in <defs>/<symbol>; the rendered check decides whether it is empty
+  if (!drawn.length && !count.use && !alreadyExplained(findings)) {
     add('error', 'svg-empty', 'The SVG draws nothing (no <path>/<rect>/<circle>… outside <defs>).', 'Check the export — layers may be hidden or the artwork is only text/images.');
   }
   if (pathErrors.length) {

@@ -316,7 +316,7 @@ export function evaluate(m, ctx) {
       `Logo on a transparent canvas (${px(m.transparentFrac)} empty). The iOS marketing icon cannot be transparent — App Store Connect rejects it — so it needs an opaque full-bleed background first.`,
       'Pick a background (brand color, solid or subtle gradient) and flatten: build.mjs --bg "#RRGGBB" writes the 1024px PNG without alpha. For iOS 26, keep the glyph as a separate layer in Icon Composer.',
     );
-  } else if (m.hasAlphaChannel) {
+  } else if (m.hasAlphaChannel && ctx.format !== 'svg') {
     add('error', 'ios', 'ios-alpha', 'The PNG has an alpha channel (even if fully opaque); App Store Connect rejects the 1024px icon with one.', 'Re-export without alpha (flatten). build.mjs writes an RGB PNG.');
   } else if (ctx.format === 'png') {
     add('ok', 'ios', 'ios-alpha', 'Opaque, no alpha channel.');
