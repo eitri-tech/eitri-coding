@@ -305,7 +305,10 @@ export function evaluate(m, ctx) {
   }
 
   // ----- iOS -----
-  const preMasked = m.roundedCorners && m.extent >= 0.9; // art fills the canvas except the corners
+  // Pre-masked = the art fills the canvas in BOTH directions and only the corners (a rounded square or circle, ≤ ~25% of the area) are empty.
+  // A wide wordmark with transparent corners spans the width but not the height, so it is just transparent artwork.
+  const spansBoth = !!m.bbox && (m.bbox.maxX - m.bbox.minX + 1) / m.w >= 0.9 && (m.bbox.maxY - m.bbox.minY + 1) / m.h >= 0.9;
+  const preMasked = m.roundedCorners && spansBoth && m.transparentFrac <= 0.25;
   if (preMasked) {
     add('error', 'ios', 'ios-rounded', 'The corners are transparent and the art fills the rest of the canvas — the icon is pre-rounded/pre-masked. iOS applies its own squircle mask; pre-rounding leaves visible edges or black corners.', 'Supply a square, full-bleed image; let the system round it.');
   } else if (m.mode === 'transparent') {

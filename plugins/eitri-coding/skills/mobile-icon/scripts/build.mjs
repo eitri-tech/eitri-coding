@@ -12,7 +12,7 @@
 //   preview.png                     contact sheet (masks, light/dark, small sizes)
 // With an already-opaque image it only writes the iOS and Play files (it cannot split layers out of a flat image).
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { extname, join, resolve, dirname } from 'node:path';
 import { decodePng, encodePng, isPng, resize, over, solid, parseHex, toHex } from './lib/png.mjs';
 import { renderSvg, toPng } from './lib/render.mjs';
@@ -177,6 +177,12 @@ if (transparent) {
   iosOut = { w: 1024, h: 1024, rgba: full(1024) };
   write('ios/AppIcon-1024.png', encodePng(1024, 1024, iosOut.rgba, { alpha: false }));
   write('play/play-store-512.png', encodePng(512, 512, full(512))); // 32-bit RGBA, alpha 255 (Play spec)
+  // An earlier run in this folder may have produced layers for a different logo; remove exactly the files this script generates for layered builds
+  const stale = ['ios/foreground-1024.png', 'android/res/mipmap-anydpi-v26/ic_launcher.xml', 'android/res/mipmap-anydpi-v26/ic_launcher_round.xml', 'android/res/values/ic_launcher_background.xml'];
+  for (const d of ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) stale.push(`android/res/drawable-${d}/ic_launcher_foreground.png`, `android/res/drawable-${d}/ic_launcher_monochrome.png`);
+  const removed = stale.filter((rel) => existsSync(join(outDir, rel)));
+  for (const rel of removed) rmSync(join(outDir, rel), { force: true });
+  if (removed.length) notes.push(`Removed ${removed.length} layer file(s) left in ${outDir} by an earlier build, so they cannot be mistaken for this logo's output.`);
   notes.push('The logo is already a flat opaque image, so adaptive-icon layers (foreground / background / monochrome) were NOT generated. Provide the glyph on a transparent background or the SVG to get them.');
   if (m.cornerFill || m.roundedCorners) notes.push('The corners look pre-rounded; the iOS file keeps them. Remove them in the source so the system mask is clean.');
 }
