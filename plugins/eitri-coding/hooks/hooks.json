@@ -8,6 +8,34 @@
             "type": "command",
             "command": "HOOK_EVENT=SessionStart bash \"${CLAUDE_PLUGIN_ROOT}/hooks/detect-eitri-project.sh\"",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "HOOK_EVENT=SessionStart bash \"${CLAUDE_PLUGIN_ROOT}/hooks/shared-awareness.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_EVENT=PostToolUse bash \"${CLAUDE_PLUGIN_ROOT}/hooks/shared-awareness.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_EVENT=Stop bash \"${CLAUDE_PLUGIN_ROOT}/hooks/shared-awareness.sh\"",
+            "timeout": 20
           }
         ]
       }
