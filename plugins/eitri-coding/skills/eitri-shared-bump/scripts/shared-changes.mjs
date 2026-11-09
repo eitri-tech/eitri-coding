@@ -83,9 +83,15 @@ const uniqSorted = vs => [...new Set(vs)].sort(cmpVer)
 function evalConf(text) {
 	if (!text) return null
 	try {
-		const sandbox = { module: { exports: {} } }
-		sandbox.exports = sandbox.module.exports
-		const json = vm.runInNewContext(`${text}\n;JSON.stringify(module.exports)`, sandbox, { timeout: 1000 })
+		// Nothing host-created may be reachable from inside: a host `module` object (or a global
+		// with a host prototype) exposes the host Function constructor and with it `process`.
+		// So the context is a null-prototype object and `module` is created INSIDE the context.
+		const context = vm.createContext(Object.create(null))
+		const json = vm.runInContext(
+			`var module = { exports: {} }; var exports = module.exports;\n${text}\n;JSON.stringify(module.exports)`,
+			context,
+			{ timeout: 1000 }
+		)
 		const obj = JSON.parse(json)
 		return obj && typeof obj === 'object' ? obj : null
 	} catch {
@@ -166,7 +172,14 @@ function ensureUpstream({ fetch }) {
 			env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
 		})
 	} else if (fetch) {
-		git(['fetch', '-q', '--force', '--tags', 'origin', '+refs/heads/main:refs/heads/main'], { gitDir })
+		// A failed fetch must not silently serve a stale cache as "latest": let it reach the
+		// library's error handler (the skill says: report the failure and stop for that library).
+		try {
+			git(['fetch', '-q', '--force', '--tags', 'origin', '+refs/heads/main:refs/heads/main'], { gitDir, allowFail: false })
+		} catch (e) {
+			const why = String(e.stderr || e.message || e).trim().split('\n')[0]
+			throw new Error(`could not update the upstream cache (${why}); use --no-fetch to knowingly read the cached, possibly stale copy`)
+		}
 	}
 	return gitDir
 }

@@ -39,7 +39,7 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/eitri-shared-bump/scripts/shared-changes.mjs"
 - No flags: every linked shared, pinned (oldest pin) → latest.
 - Bump in progress (the hook tells you `lib: A → B`): `--only <lib> --from A --to B`. The report then also includes `skipped` — what lies between B and the latest, so the user sees what they are *not* taking.
 - `--pins-changed` lists pins changed in the working tree/branch vs the base branch (what triggered you). If the default branch is not `main`/`master`/`develop`/`trunk`, pass `--base <ref>`; when no base resolves the output carries a `warning` and only uncommitted bumps are visible.
-- `--no-fetch` skips `git fetch` of the cache; first run clones (~1 s, blobs are lazy, a full report can take tens of seconds).
+- `--no-fetch` skips `git fetch` of the cache (a failed fetch is an error, not a silent stale read; if you use `--no-fetch` after one, tell the user the data may be stale); first run clones (~1 s, blobs are lazy, a full report can take tens of seconds).
 
 Needs `git` and network for the upstream clone. If the clone/fetch fails, **say so and stop for that library** — do not reconstruct a changelog from memory or from this skill's notes.
 
