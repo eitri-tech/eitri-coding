@@ -100,6 +100,7 @@ When active, Claude operates as a Senior Eitri Expert Front-End Developer with k
 - **Runtime safety** — defensive code by default, since a `TypeError` in a WebView blanks the screen instead of failing the build
 - **Eitri Manager MCP** — bundled remote MCP server for managing your Eitri apps (OAuth login via `/mcp`)
 - **Site cloning** (`site-clone` skill) — captures a live URL with Playwright and rebuilds it in the project's framework (Eitri, FastStore, or generic React). Needs Node.js; first run installs Playwright and Chromium
+- **App creation** (`create-app` skill) — "Create an Eitri app for the store <url>": detects the store (VTEX, Wake or Shopify), creates the organization, application, mini-apps, slug aliases, remote config, Luminus v1 + v2 theme and icon through the Eitri Manager MCP, wires the platform's template repo, rebuilds the store's look with `site-clone`, pushes and publishes to `dev` for preview in Eitri Play. Needs the MCP login, Node.js and the Eitri CLI (`eitri login`)
 - **Device automation** (`eitri-device` skill) — screenshot, tap, swipe, type, native tab switching, and live DOM / console inspection of the Eitri WebView, on Android (ADB + Chrome DevTools Protocol) and the iOS Simulator (idb + WebKit Inspector)
 
 Each capability is a separate skill; `eitri-specialist` is the entry point and chains to the others.
@@ -124,6 +125,9 @@ plugins/eitri-coding/
     eitri-shopping/              # Eitri Shopping bundles (multi-app e-commerce)
     eitri-typescript-migrate/    # JS→TS migration for an existing Eitri-App workspace
     eitri-claude-design-migrate/ # Claude Design → Eitri porting
+    create-app/                  # Store URL → complete Eitri app (Console via MCP + local repo)
+      scripts/                   # detect-store, wire-app, remote-config, brand-theme (Node, no deps; `npm test`)
+      references/                # Remote config per platform, brand reading, handoff template
     site-clone/                  # Live website → rebuild in the project's framework
       scripts/                   # Playwright capture (scrape.mjs) and screenshot (shot.mjs)
       references/                # Rebuild loop + per-framework adapters

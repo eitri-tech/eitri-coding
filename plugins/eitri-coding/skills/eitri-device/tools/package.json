@@ -1,0 +1,12 @@
+{
+  "name": "eitri-device-tools",
+  "private": true,
+  "type": "module",
+  "description": "Node tools of the eitri-device skill: browser-preview renders an Eitri dev workspace in Chromium, playing the native host eitri-bifrost talks to.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "^1.56.0"
+  }
+}

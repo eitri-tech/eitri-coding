@@ -42,7 +42,7 @@ const chromium = await (async () => {
   for (const spec of ['playwright', 'playwright-core']) {
     try { return (await import(spec)).chromium } catch {}
   }
-  console.error(`\nPlaywright is not installed for this skill. Run once:\n\n  cd ${import.meta.dirname} && npm install\n`)
+  console.error(`\nPlaywright is not installed for this skill. Run once:\n\n  cd ${import.meta.dirname} && npm ci && npx playwright install chromium\n`)
   process.exit(1)
 })()
 

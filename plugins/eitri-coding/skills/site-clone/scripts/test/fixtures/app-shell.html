@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App Shell</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  #shell { position: fixed; inset: 0; overflow: auto; }
+  header { height: 80px; background: #0af; }
+  section { height: 500px; border-bottom: 1px solid #ccc; }
+  .close-account { position: absolute; top: 8px; right: 8px; }
+</style>
+</head>
+<body>
+<!-- A whole site laid out inside one fixed scroller: it is the page, not a popup. -->
+<div id="shell">
+  <header><h1>App Shell</h1><a class="close-account" href="/logout">Fechar</a></header>
+  <main>
+    <section id="hero"><h2>Destaques</h2></section>
+    <section id="shelf"><h2>Mais vendidos</h2></section>
+  </main>
+</div>
+<!-- A transparent click-catcher behind a header tooltip: it covers the viewport but paints nothing. -->
+<div class="tooltip-backdrop" style="position: fixed; inset: 0; z-index: 40;"></div>
+</body>
+</html>

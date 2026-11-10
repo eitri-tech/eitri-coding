@@ -1,6 +1,6 @@
 ---
 name: eitri-device
-description: 'Drive and inspect a running Eitri-App on a real device or simulator — screenshots, taps, swipes, typing, native tab switching, and live DOM/console inspection of the Eitri WebView through the Chrome DevTools Protocol (Android) or the WebKit Inspector (iOS). ALWAYS invoke this skill whenever the work requires observing or interacting with the app as it runs: the user asks to open/run/launch the app, take a screenshot, tap/click/scroll something on the device, check what a screen looks like, reproduce a bug on device, read runtime console errors, confirm a generated view actually renders, or mentions ADB, EitriPlay, emulator, simulator, device, `android.py` or `ios.py`. Also invoke it whenever a coding change needs visual or runtime validation on device rather than only a code read.'
+description: 'Drive and inspect a running Eitri-App on a real device or simulator — screenshots, taps, swipes, typing, native tab switching, and live DOM/console inspection of the Eitri WebView through the Chrome DevTools Protocol (Android) or the WebKit Inspector (iOS). ALWAYS invoke this skill whenever the work requires observing or interacting with the app as it runs: the user asks to open/run/launch the app, take a screenshot, tap/click/scroll something on the device, check what a screen looks like, reproduce a bug on device, read runtime console errors, confirm a generated view actually renders, or mentions ADB, EitriPlay, emulator, simulator, device, `android.py` or `ios.py`. Also invoke it whenever a coding change needs visual or runtime validation on device rather than only a code read — and when no device or emulator is attached: `tools/browser-preview.mjs` renders the dev build in a headless browser at phone size.'
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -15,6 +15,44 @@ ${CLAUDE_SKILL_DIR}/tools/
 ```
 
 Shortened to `.../` in examples.
+
+---
+
+## No device: browser preview
+
+Without a phone or emulator, render the app in Chromium instead — same compiled code, same Luminus,
+same published theme, live store data:
+
+```bash
+eitri app start            # (or `eitri start` for one app) in the background: it builds each mini-app into a dev workspace and rebuilds on save
+node .../browser-preview.mjs --app home --config .eitri/remote-config.json \
+     --compare scrape/home/screenshots/375-fullpage.png --out preview
+```
+
+How it works: Eitri-Play opens a workspace at `https://api.eitri.tech/foundry/user/<workspaceId>/index.html`, an
+ordinary web page. The only native piece is eitri-bifrost's bridge (`{methodName, promiseId, args}` posted to
+`window.ReactNativeWebView`, answered through `window.EITRI.connector.resolvePromise`), and the tool plays that host:
+remote config from the file, init params, storage in memory, HTTP made by Node (no CORS).
+
+| Option | Use |
+|---|---|
+| `--app <name>` | The workspace name from `app-config.yaml` (`home`, `cart`…): the id comes from `eitri workspace list`. Or `--workspace <id>` / `--url <url>`. |
+| `--config <file>` | The environment's remote config: create-app's `.eitri/remote-config.json`, or the `config` of `get_environment_config` saved to a file. Without it the app gets `{}` and most shopping screens stay on their skeleton. |
+| `--init "route=Categories&tabIndex=1"` | Initialization params, as a bottom tab or deep link passes them — the way to open a specific view. |
+| `--compare <png>` | A reference screenshot (site-clone's `scrape/<slug>/screenshots/375-fullpage.png`): writes `compare/NN.png`, reference and app side by side per screen. |
+| `--headed` | For a person: a visible phone-sized window that stays open and usable (taps, scroll, in-app navigation) until it is closed; the tool prints, live, the mini-apps or links the app asks to open, which the browser does not follow. |
+| `--locale`, `--bp`, `--dpr`, `--wait` | Language (default: the config's `storePreferences.locale`), width (375), scale (1, like site-clone), settle time. |
+
+It writes `viewport.png`, `fullpage.png`, `tiles/NN.png` (screen-high slices — read these, a full page is too tall
+to see) and `report.json`: `pageErrors` (uncaught exceptions — a blank screen's cause), `overflowX` (content wider than the
+screen: a layout bug on a phone), `consoleErrors`,
+`failedRequests`, `unhandled` (native methods the tool does not emulate) and `opened` (mini-apps, links or
+deep links the page asked to open — follow one by previewing that app with the matching `--init`).
+
+The dev workspace serves what `eitri app start` last built: after a save, wait for that app's "✓ Forjado em …"
+line in the watcher's output before previewing again ("Pronto para desenvolvimento" is only printed at startup). Limits: Chromium is not the Android WebView; the native bottom bar, status bar and safe areas
+are not drawn; camera, geolocation and biometrics answer "denied". Use it for the build → look → fix loop and for
+runtime errors; confirm on a device before release when one is available.
 
 ---
 

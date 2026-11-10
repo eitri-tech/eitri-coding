@@ -698,22 +698,133 @@ const CONSENT = [
   '#didomi-notice-agree-button', '.cc-allow', '.cookie-accept', '[data-testid*="accept" i]'
 ]
 
-async function settle (page) {
-  let dismissed = false
+/** Accepts a consent banner; returns how, or null when none is showing. */
+async function acceptConsent (page) {
   for (const sel of CONSENT) {
     try {
       const el = page.locator(sel).first()
-      if (await el.isVisible({ timeout: 250 })) { await el.click({ timeout: 1500 }); dismissed = true; break }
+      if (await el.isVisible({ timeout: 250 })) { await clickAnyway(el); return `consent banner (${sel})` }
     } catch {}
   }
-  if (!dismissed) {
-    // Fall back to the button label — most consent walls are not OneTrust.
-    try {
-      const btn = page.getByRole('button', { name: /^(accept|accept all|allow all|agree|i agree|got it|ok|aceitar|aceitar todos|concordo|entendi|akzeptieren|aceptar)$/i }).first()
-      if (await btn.isVisible({ timeout: 500 })) { await btn.click({ timeout: 1500 }); dismissed = true }
-    } catch {}
+  // Fall back to the button label — most consent walls are not OneTrust.
+  try {
+    const btn = page.getByRole('button', { name: /^(accept|accept all|allow all|agree|i agree|got it|ok|aceitar|aceitar todos|concordo|entendi|akzeptieren|aceptar)$/i }).first()
+    if (await btn.isVisible({ timeout: 500 })) { await clickAnyway(btn); return 'consent banner (its accept button)' }
+  } catch {}
+  return null
+}
+
+/** A real click, or a DOM click when another layer (a popup over the banner) intercepts it. */
+async function clickAnyway (locator) {
+  try { await locator.click({ timeout: 1500 }) } catch { await locator.evaluate(e => e.click()) }
+}
+
+// In-page: the first visible fixed layer covering most of the viewport (a
+// newsletter / welcome / coupon popup) and its own close control, marked with
+// data-sc-close. Never an app shell (one holding <main> or most of the DOM), and
+// never a link that would navigate away.
+const FIND_POPUP = () => {
+  const visible = el => {
+    const r = el.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
   }
-  if (dismissed) await page.waitForTimeout(600)
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '')
+  // A popup paints: a tinted backdrop, or a dialog of real size inside it. An empty
+  // transparent click-catcher (behind a tooltip or a menu) covers nothing anyone sees.
+  const paints = el => {
+    const cs = getComputedStyle(el)
+    const alpha = (cs.backgroundColor.match(/[\d.]+/g) || []).map(Number)
+    if (cs.backgroundImage !== 'none' || (alpha.length === 3) || (alpha.length === 4 && alpha[3] > 0.05)) return true
+    return [...el.querySelectorAll('*')].some(c => { const r = c.getBoundingClientRect(); return r.width >= 120 && r.height >= 80 && visible(c) })
+  }
+  const total = document.body.getElementsByTagName('*').length
+  const overlays = [...document.body.querySelectorAll('*')].filter(el => {
+    if (getComputedStyle(el).position !== 'fixed' || !visible(el) || el.hasAttribute('data-sc-stuck')) return false
+    const r = el.getBoundingClientRect()
+    if (r.width < innerWidth * 0.6 || r.height < innerHeight * 0.5) return false
+    return !el.querySelector('main') && el.getElementsByTagName('*').length < Math.max(600, total * 0.5) && paints(el)
+  }).filter((el, _, all) => !all.some(o => o !== el && o.contains(el)))
+  const CLOSE_TEXT = /^(×|✕|✖|✗|x|fechar|close|cerrar|schließen|não, obrigado|nao, obrigado|no thanks)$/i
+  const CLOSE_ATTR = /close|fechar|dismiss|cerrar/i
+  for (const overlay of overlays) {
+    const controls = [...overlay.querySelectorAll('button, a, [role="button"], span, div, i, svg, img')].filter(el => {
+      if (!visible(el)) return false
+      const r = el.getBoundingClientRect()
+      if (r.width > 160 || r.height > 80) return false
+      if (el.tagName === 'A' && !/^(#|javascript:|$)/i.test(el.getAttribute('href') || '')) return false
+      const label = [el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('alt')].filter(Boolean).join(' ')
+      const named = [el.id, typeof el.className === 'string' ? el.className : el.getAttribute('class')].filter(Boolean).join(' ')
+      const href = el.tagName === 'A' ? el.getAttribute('href') || '' : ''
+      // Popup builders wrap an icon-only link in a (often zero-size) "…close…" element.
+      const wrapper = el.parentElement && el.parentElement.closest('[class*="close" i], [id*="close" i]')
+      const inCloseWrapper = !!wrapper && wrapper !== overlay && overlay.contains(wrapper)
+      return CLOSE_TEXT.test((el.textContent || '').trim()) || CLOSE_ATTR.test(label) || CLOSE_ATTR.test(named) || CLOSE_ATTR.test(href) || inCloseWrapper
+    })
+    // The innermost match is the control itself, not a wrapper around it; an icon clicks through its link or button.
+    const inner = controls.find(c => !controls.some(o => o !== c && c.contains(o)))
+    const clickable = inner && inner.closest('a, button, [role="button"]')
+    const control = clickable && overlay.contains(clickable) ? clickable : inner
+    if (control) { overlay.setAttribute('data-sc-overlay', ''); control.setAttribute('data-sc-close', ''); return { overlay: describe(overlay), control: describe(control) } }
+    overlay.setAttribute('data-sc-stuck', '')
+    return { overlay: describe(overlay), control: null }
+  }
+  return null
+}
+
+/**
+ * Closes popups and accepts consent banners, alternating until neither is left
+ * (a popup can sit on top of the banner, or the other way round). Returns what
+ * it did, for the bundle's warnings.
+ */
+async function dismissOverlays (page) {
+  const done = []
+  let consentDone = false
+  for (let round = 0; round < 5; round++) {
+    let acted = false
+    if (!consentDone) {
+      const consent = await acceptConsent(page)
+      if (consent) { consentDone = acted = true; done.push(`Dismissed ${consent} before capturing.`); await page.waitForTimeout(400) }
+    }
+    let found = null
+    try { found = await page.evaluate(FIND_POPUP) } catch {}
+    if (found && !found.control) {
+      acted = true // marked stuck: the next round looks past it
+      done.push(`A fixed overlay (${found.overlay}) covers the page and has no close control the capture recognises: re-run with --click "<its close selector>".`)
+    } else if (found) {
+      acted = true
+      try { await clickAnyway(page.locator('[data-sc-close]').first()) } catch {}
+      // Popups fade out: wait for it to go rather than judging it mid-animation.
+      try {
+        await page.waitForFunction(() => {
+          const o = document.querySelector('[data-sc-overlay]')
+          return !o || !o.isConnected || getComputedStyle(o).display === 'none' || getComputedStyle(o).visibility === 'hidden' || o.getBoundingClientRect().height === 0
+        }, null, { timeout: 3000 })
+      } catch {}
+      let still = false
+      try {
+        still = await page.evaluate(() => {
+          const o = document.querySelector('[data-sc-overlay]')
+          const shown = !!o && o.isConnected && getComputedStyle(o).display !== 'none' && getComputedStyle(o).visibility !== 'hidden' && o.getBoundingClientRect().height > 0
+          document.querySelectorAll('[data-sc-close],[data-sc-overlay]').forEach(e => { e.removeAttribute('data-sc-close'); e.removeAttribute('data-sc-overlay') })
+          if (o && shown) o.setAttribute('data-sc-stuck', '')
+          return shown
+        })
+      } catch {}
+      done.push(still
+        ? `A popup (${found.overlay}) did not close through ${found.control}: re-run with --click "<its close selector>".`
+        : `Dismissed popup ${found.overlay} through ${found.control} before capturing.`)
+    }
+    if (!acted) break
+  }
+  return done
+}
+
+/** Brings the page to the state the capture records; returns the dismissal notes. */
+async function settle (page) {
+  const notes = await dismissOverlays(page)
+  if (notes.length) await page.waitForTimeout(600)
   for (const sel of CLICKS) {
     try { await page.locator(sel).first().click({ timeout: 3000 }); await page.waitForTimeout(600) } catch { log('click failed:', sel) }
   }
@@ -725,13 +836,17 @@ async function settle (page) {
   })
   try { await page.waitForLoadState('networkidle', { timeout: 8000 }) } catch {}
   await page.waitForTimeout(WAIT)
+  // Consent banners and marketing popups often show up seconds after load, or on scroll.
+  const late = await dismissOverlays(page)
+  if (late.length) await page.waitForTimeout(600)
+  return [...notes, ...late]
 }
 
 async function loadChromium () {
   for (const spec of ['playwright', 'playwright-core']) {
     try { return (await import(spec)).chromium } catch {}
   }
-  console.error(`\nPlaywright is not installed for this skill. Run once:\n\n  cd ${import.meta.dirname} && npm install\n`)
+  console.error(`\nPlaywright is not installed for this skill. Run once:\n\n  cd ${import.meta.dirname} && npm ci && npx playwright install chromium\n`)
   process.exit(1)
 }
 
@@ -797,6 +912,7 @@ async function main () {
 
   const perBp = {}
   const domRefs = new Set()
+  const dismissals = new Set()
   let primaryPage = null
 
   for (const bp of BPS) {
@@ -806,7 +922,7 @@ async function main () {
     try {
       await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: TIMEOUT })
     } catch (e) { console.error('   navigation:', e.message) }
-    await settle(page)
+    for (const note of await settle(page)) { dismissals.add(note); log(`  ${note}`) }
 
     const sections = await safe(`section split @${bp}`, () => page.evaluate(f => window.__sc.sections(f), FORCE_SECTIONS), [])
     log(`  ${sections.length} sections`)
@@ -817,6 +933,8 @@ async function main () {
       if (t) trees.push({ meta: s, tree: t })
     }
 
+    // Popups on a long timer can land while the trees are read: keep them out of the pictures.
+    for (const note of await dismissOverlays(page)) dismissals.add(note)
     mk(path.join(OUT, 'screenshots'))
     try { await page.screenshot({ path: path.join(OUT, 'screenshots', `${bp}-fullpage.png`), fullPage: true }) } catch (e) { log('  fullpage shot failed:', e.message) }
     try { await page.screenshot({ path: path.join(OUT, 'screenshots', `${bp}-viewport.png`) }) } catch {}
@@ -825,7 +943,13 @@ async function main () {
     for (const s of sections) {
       const name = `${pad(s.index)}-${slug(s.heading || s.id || s.classes.split(/\s+/)[0] || s.tag)}@${bp}.png`
       try {
-        await page.locator(`[data-sc-section="${s.index}"]`).screenshot({ path: path.join(OUT, 'screenshots', 'sections', name), timeout: 15000 })
+        const section = page.locator(`[data-sc-section="${s.index}"]`)
+        // A popup can open again long after load — on a timer, or when this part of the page scrolls
+        // into view (an exit popup on the footer): bring the section in, let it fire, close it, then shoot.
+        await section.scrollIntoViewIfNeeded({ timeout: 5000 })
+        await page.waitForTimeout(250)
+        for (const note of await dismissOverlays(page)) dismissals.add(note)
+        await section.screenshot({ path: path.join(OUT, 'screenshots', 'sections', name), timeout: 15000 })
       } catch {}
     }
 
@@ -835,8 +959,9 @@ async function main () {
     else await page.close()
   }
 
-  if (!primaryPage) { primaryPage = await (await makeContext(PRIMARY)).newPage(); await primaryPage.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: TIMEOUT }); await settle(primaryPage); await primaryPage.evaluate(f => window.__sc.sections(f), FORCE_SECTIONS) }
+  if (!primaryPage) { primaryPage = await (await makeContext(PRIMARY)).newPage(); await primaryPage.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: TIMEOUT }); for (const note of await settle(primaryPage)) dismissals.add(note); await primaryPage.evaluate(f => window.__sc.sections(f), FORCE_SECTIONS) }
 
+  for (const note of await dismissOverlays(primaryPage)) dismissals.add(note)
   log('design tokens, outline, behaviors, svgs')
   const design = await safe('design tokens', () => primaryPage.evaluate(collectDesign),
     { cssVariables: {}, sampled: 0, typographyByTag: {}, frequencies: {}, fontUsage: [] })
@@ -1040,7 +1165,7 @@ async function main () {
   }
   wTXT(path.join(OUT, 'content', 'copy.md'), copy)
 
-  const warnings = [...phaseErrors]
+  const warnings = [...phaseErrors, ...dismissals]
   if (sectionIndex.length > 30) warnings.push(`${sectionIndex.length} sections is unusually many — the split has probably fragmented. Compare against screenshots/ and re-run with --sections.`)
   if (!sectionIndex.length) warnings.push('No sections detected — the page may be blocked, empty, or behind a consent wall. Check screenshots/, then re-run with --sections.')
   if (census.shadowHosts) warnings.push(`${census.shadowHosts} shadow root(s): trees include their contents, and scoped rules are in css/shadow.css (NOT applied by snapshot.html).`)

@@ -6,7 +6,9 @@ description: Scrape a live website with Playwright and rebuild it 1:1 in the cur
 # site-clone
 
 Turn a live URL into a **reference bundle**, then rebuild it section by section in
-whatever framework the current project uses. Two separate jobs — do not mix them:
+whatever framework the current project uses. To create a **new** Eitri app for a store
+(Console setup + template repo + rebuild), use the `create-app` skill: it drives this one.
+Two separate jobs — do not mix them:
 
 | Phase | Tool | Why |
 |---|---|---|
@@ -141,6 +143,7 @@ Work down this list — the fix is almost always a flag, not a code change:
 | Content missing that needs a click (menu, tab, "load more") | `--click "sel,sel"` |
 | Content missing that needs login | `npx playwright open --save-storage=auth.json <url>`, log in by hand, then `--storage auth.json` |
 | Nothing loads / bot wall | `--headed`, `--wait 8000`, `--timeout 120000` |
+| A popup or consent banner in the screenshots | The capture accepts consent banners and closes popups (newsletter, coupon, welcome) through their own close control, before and after the scroll, before the screenshots and again before each section screenshot (popups that reopen late, on a timer or when a part of the page scrolls into view); `warnings` lists each one. One it names as not closed: `--click "<its close selector>"` |
 | Lazy images missing | `--wait 6000` (the script already scrolls the full page) |
 | Layout is desktop at a mobile breakpoint | already handled below 700px; check the site isn't serving by UA — try `--header "User-Agent: …"` |
 | Warned about shadow roots | Expected. Trees include shadow content; scoped rules are in `css/shadow.css` and are **not** applied by `snapshot.html`, so that page will look wrong while the data is fine. |

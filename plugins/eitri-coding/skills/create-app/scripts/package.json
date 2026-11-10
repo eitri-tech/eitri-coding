@@ -1,0 +1,9 @@
+{
+  "name": "create-app-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic helpers of the create-app skill: store detection, repo wiring, remote config and brand theme. No dependencies.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
