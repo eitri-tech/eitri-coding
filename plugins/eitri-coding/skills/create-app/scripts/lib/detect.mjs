@@ -160,6 +160,35 @@ function iconCandidates(links, pageUrl) {
     return [...new Set([...raster, `${origin}/apple-touch-icon.png`, ...favicons, `${origin}/favicon.ico`])]
 }
 
+// Besides the home, the pages whose look the app's other screens copy (PDP, cart, account):
+// a product link found on the home, and each platform's fixed cart and login paths.
+const PAGE_RULES = {
+    VTEX: { product: /^\/[^/]+\/p\/?$/, cart: "/checkout/#/cart", login: "/login" },
+    SHOPIFY: { product: /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/[^/]+\/?$/, cart: "/cart", login: "/account/login" },
+    WAKE: { product: /^\/produto\//, cart: "/carrinho", login: "/login" },
+}
+
+function pagesToCapture(platform, pageUrl, anchors) {
+    const rules = PAGE_RULES[platform]
+    if (!rules) return null
+    const origin = new URL(pageUrl).origin
+    let product = null
+    for (const { href } of anchors) {
+        if (!href) continue
+        let target
+        try {
+            target = new URL(href, pageUrl)
+        } catch {
+            continue
+        }
+        if (target.origin === origin && rules.product.test(target.pathname)) {
+            product = `${origin}${target.pathname}`
+            break
+        }
+    }
+    return { product, cart: `${origin}${rules.cart}`, login: `${origin}${rules.login}` }
+}
+
 export function detectStore({ url, html }) {
     // JSON-escaped URLs (VTEX runtime) read like plain ones.
     const text = html.replace(/\\u002F/gi, "/").replace(/\\\//g, "/")
@@ -192,6 +221,7 @@ export function detectStore({ url, html }) {
         currency: detectCurrency(text, detected),
         themeColor: metaContent(metas, "theme-color"),
         iconCandidates: iconCandidates(links, url),
+        pages: pagesToCapture(detected, url, tags(html, "a")),
     }
 }
 

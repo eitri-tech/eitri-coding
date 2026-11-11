@@ -172,3 +172,28 @@ test("VTEX tenant: what the page declares wins; a malformed answer changes nothi
     assert.deepEqual(withVtexTenant(bare, { defaultCurrency: "reais" }), bare)
     assert.equal(withVtexTenant(bare, { bindings: [{ defaultCurrency: "BRL" }] }).currency, "BRL")
 })
+
+test("pages to capture besides the home: the first product link, the platform's cart and login", () => {
+    const vtex = detectStore({
+        url: "https://compre.seara.com.br/",
+        html: VTEX_FASTSTORE.replace(
+            "</body>",
+            '<a href="/institucional/quem-somos">Quem somos</a><a href="https://other.com/x/p">x</a><a href="/kit-agradecimento-40/p">Kit</a><a href="/kit-ano-novo-46/p?skuId=1">Kit</a></body>',
+        ),
+    })
+    assert.deepEqual(vtex.pages, {
+        product: "https://compre.seara.com.br/kit-agradecimento-40/p",
+        cart: "https://compre.seara.com.br/checkout/#/cart",
+        login: "https://compre.seara.com.br/login",
+    })
+
+    const shopify = detectStore({
+        url: "https://loja.com/",
+        html: '<script>Shopify.shop = "loja.myshopify.com";</script><script src="https://cdn.shopify.com/a.js"></script><script src="https://cdn.shopify.com/b.js"></script><a href="/collections/all">all</a><a href="/products/camisa-azul?variant=1">x</a>',
+    })
+    assert.deepEqual(shopify.pages, { product: "https://loja.com/products/camisa-azul", cart: "https://loja.com/cart", login: "https://loja.com/account/login" })
+
+    // No product link on the home: the product page is left for the agent to pick from the capture.
+    assert.equal(detectStore({ url: "https://compre.seara.com.br/", html: VTEX_FASTSTORE }).pages.product, null)
+    assert.equal(detectStore({ url: "https://example.com/", html: "<html><title>x</title></html>" }).pages, null)
+})

@@ -146,8 +146,16 @@ Eitri does **not** use `App.tsx`. Centralize all global state in the `providers`
 - **Layout direction:** `View` is a flex container laid out as a row by default. Use Tailwind for direction and alignment (`flex-col`, `items-center`, `justify-between`). The `orientation` prop does not work in Luminus v2 — never use it, and replace it with `flex-col` / `flex-row` when you touch code that has it.
 - **Layout** Only do layout for mobile devices because Eitri apps are mobile mini-apps.
 - **Colors:** use theme classes (`bg-primary`, `text-base-content`, named colors from the theme's `extend`). An arbitrary hex (`bg-[#1E5BFF]`) is acceptable only for a true one-off and only if the project allows it; a color used in more than one place becomes a theme token first.
-- **`style` is for runtime values only.** Tailwind classes must be static strings, so a value that arrives at runtime (a color or image coming from the CMS, a computed width) cannot be a class: pass it through `style`, and only when the value exists. Everything static stays in `className`.
+- **`style` is for runtime values only.** Tailwind classes must be static strings, so a value that arrives at runtime (a color or image coming from the CMS, a computed width) cannot be a class: pass it through `style`, and only when the value exists. Everything static stays in `className`. `Text` drops `style`: put a runtime text color on the wrapping `View` (see `eitri-luminus` → Silent pitfalls).
 - **Icons:** prefer `react-icons` (supported version) or the project's existing icon components. A raw `<svg>` is acceptable only inside a dedicated icon component (e.g. `src/components/Icons/`), never inline in a screen.
+
+### Translations
+
+Forge builds each mini-app's i18next resources from `src/locales/<lang>/translation.json` and starts it with the device language Eitri-Play passes (`hl`, e.g. `en-US`, `pt-BR`) and `fallbackLng: "en"`. i18next falls back from `pt-BR` to `pt`, never from `en` to `en-US`, so:
+
+- Name the folders by language: `src/locales/en`, `src/locales/pt`. A regional folder (`pt-BR`, `en-US`) serves only that exact device language.
+- Without an English folder, a phone set to English shows the raw keys (`emptyCart.txtEmptyCart`) — the fallback has nothing to fall back to.
+- Every interface text goes through `t()` with the key in every language file. Store content (CMS, catalog, captured copy) is not translated.
 
 ### Theme
 

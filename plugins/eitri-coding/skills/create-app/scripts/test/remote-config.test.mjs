@@ -152,3 +152,26 @@ test("a VTEX store without a detected account is a need, not a guess", () => {
     const { needs } = buildRemoteConfig({ template: VTEX_TEMPLATE, profile: { platform: "VTEX", host: "https://x.com" }, slugs: SLUGS })
     assert.deepEqual(needs.map((n) => n.path), ["providerInfo.account"])
 })
+
+test("warns when the header logo URL asks the CDN for a small resized copy", () => {
+    const logo = "https://loja.vtexassets.com/assets/vtex.file-manager-graphql/images/abc___123.png"
+    const resized = buildRemoteConfig({
+        template: VTEX_TEMPLATE,
+        profile: { platform: "VTEX", host: "https://www.loja.com.br", account: "loja" },
+        slugs: SLUGS,
+        overrides: { "appConfigs.headerLogo": `${logo}?width=68&aspect=true&quality=8` },
+    })
+    const warning = resized.warnings.find((w) => w.includes("headerLogo") && w.includes("resized"))
+    assert.ok(warning, "no resize warning")
+    assert.ok(warning.includes("width=68") && warning.includes("quality=8"), warning)
+    assert.ok(warning.includes(` ${logo} `) || warning.endsWith(logo), `names the original URL: ${warning}`)
+
+    // A cache-buster is not a resize.
+    const clean = buildRemoteConfig({
+        template: VTEX_TEMPLATE,
+        profile: { platform: "VTEX", host: "https://www.loja.com.br", account: "loja" },
+        slugs: SLUGS,
+        overrides: { "appConfigs.headerLogo": `${logo}?v=2` },
+    })
+    assert.ok(!clean.warnings.some((w) => w.includes("resized")))
+})

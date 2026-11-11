@@ -75,6 +75,23 @@ function resolveSlug(slug, slugs) {
     return slugs[slug] ?? slugs[String(slug).split("-").pop()]
 }
 
+// Query parameters image CDNs read as "resize this" (VTEX: width/height/aspect/quality; Shopify: width/height).
+const RESIZE_PARAMS = new Set(["width", "height", "w", "h", "quality", "q", "aspect"])
+
+/** The resize parameters of an image URL and the URL without them, or null when it asks for the original. */
+function resizeParams(url) {
+    let parsed
+    try {
+        parsed = new URL(url)
+    } catch {
+        return null
+    }
+    const found = [...parsed.searchParams.entries()].filter(([key]) => RESIZE_PARAMS.has(key.toLowerCase()))
+    if (!found.some(([key]) => key.toLowerCase() !== "aspect")) return null
+    for (const [key] of found) parsed.searchParams.delete(key)
+    return { params: found.map(([k, v]) => `${k}=${v}`).join(", "), original: parsed.href }
+}
+
 export function buildRemoteConfig({ template, profile, slugs, secrets = {}, overrides = {} }) {
     const platform = templatePlatform(template)
     if (profile.platform && platform && profile.platform !== platform) {
@@ -117,6 +134,14 @@ export function buildRemoteConfig({ template, profile, slugs, secrets = {}, over
 
     for (const [path, value] of Object.entries(overrides)) setPath(config, path, value)
     if (!config.appConfigs.headerLogo) warnings.push("appConfigs.headerLogo is empty: set the store's logo URL so the header shows it.")
+    else {
+        const resize = resizeParams(config.appConfigs.headerLogo)
+        if (resize) {
+            warnings.push(
+                `appConfigs.headerLogo asks the CDN for a resized copy (${resize.params}), which the header shows blurry: use the original file ${resize.original} (check it loads).`,
+            )
+        }
+    }
 
     return { config, needs, warnings }
 }
