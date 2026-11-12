@@ -5,6 +5,7 @@
 //
 // Returns { config, needs, warnings }: `needs` are values only the user can
 // give (credentials); `warnings` are things that work but look unfinished.
+import { proxiedOriginal } from "./imageUrl.mjs"
 
 const RECAPTCHA_PLACEHOLDER = /^x+$/i
 
@@ -77,7 +78,6 @@ function resolveSlug(slug, slugs) {
 
 // Query parameters image CDNs read as "resize this" (VTEX: width/height/aspect/quality; Shopify: width/height).
 const RESIZE_PARAMS = new Set(["width", "height", "w", "h", "quality", "q", "aspect"])
-
 /** The resize parameters of an image URL and the URL without them, or null when it asks for the original. */
 function resizeParams(url) {
     let parsed
@@ -88,11 +88,15 @@ function resizeParams(url) {
     }
     const found = [...parsed.searchParams.entries()].filter(([key]) => RESIZE_PARAMS.has(key.toLowerCase()))
     if (!found.some(([key]) => key.toLowerCase() !== "aspect")) return null
+    const params = found.map(([k, v]) => `${k}=${v}`).join(", ")
+    // An image proxy (deco /image?src=, Next.js /_next/image?url=) names the original itself.
+    const original = proxiedOriginal(url)
+    if (original !== url) return { params, original }
     for (const [key] of found) parsed.searchParams.delete(key)
-    return { params: found.map(([k, v]) => `${k}=${v}`).join(", "), original: parsed.href }
+    return { params, original: parsed.href }
 }
 
-export function buildRemoteConfig({ template, profile, slugs, secrets = {}, overrides = {} }) {
+export function buildRemoteConfig({ template, profile, slugs, secrets = {}, overrides = {}, features }) {
     const platform = templatePlatform(template)
     if (profile.platform && platform && profile.platform !== platform) {
         throw new Error(`This is a ${platform} template but a ${profile.platform} store: pick the store's template.`)
@@ -130,6 +134,15 @@ export function buildRemoteConfig({ template, profile, slugs, secrets = {}, over
         warnings.push(
             `deeplinkResolver.slug "${config.deeplinkResolver.slug}" is a separate add-on mini-app this app does not include: deep links do not resolve until it is licensed to the app.`,
         )
+    }
+
+    // What analyze-store.mjs found: integrated services and badges are set; opt-ins are the store's call.
+    for (const [path, value] of Object.entries(features?.remoteConfig ?? {})) setPath(config, path, value)
+    for (const opt of features?.optIn ?? []) {
+        const values = opt.remoteConfig
+            ? Object.entries(opt.remoteConfig).map(([path, value]) => `${path} = ${JSON.stringify(value)}`)
+            : [JSON.stringify(opt.config ?? {})]
+        warnings.push(`Opt-in ${opt.id}: ${values.join(", ")} — not set. ${opt.note ?? ""}`.trim())
     }
 
     for (const [path, value] of Object.entries(overrides)) setPath(config, path, value)

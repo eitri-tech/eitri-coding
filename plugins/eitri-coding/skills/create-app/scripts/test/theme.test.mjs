@@ -13,10 +13,12 @@ test("v2 content has the Console's shape: one DaisyUI theme named eitri, default
         "error", "error-content", "info", "info-content", "neutral", "neutral-content",
         "primary", "primary-content", "secondary", "secondary-content",
         "success", "success-content", "warning", "warning-content",
-    ])
+        // DaisyUI's own radii (inputs, buttons, cards, badges draw from these, not from theme.borderRadius).
+        "--rounded-badge", "--rounded-box", "--rounded-btn",
+    ].sort())
     assert.deepEqual(out.v2.theme.borderRadius, {
-        xs: "0.125rem", sm: "0.25rem", md: "0.75rem", lg: "0.5rem", xl: "0.75rem", "2xl": "1rem", "3xl": "1.5rem", full: "9999px",
-    })
+        none: "0px", xs: "0.125rem", sm: "0.25rem", DEFAULT: "0.25rem", md: "0.75rem", lg: "0.5rem", xl: "0.75rem", "2xl": "1rem", "3xl": "1.5rem", full: "9999px",
+    }, "the whole scale: theme.borderRadius replaces Tailwind's, so `rounded-none` and `rounded` need their steps")
 })
 
 test("content colors follow contrast: dark text on yellow, white text on navy", () => {
@@ -73,8 +75,12 @@ test("base steps mix the background toward the text color", () => {
 
 test("a square brand gets square corners everywhere but full", () => {
     const out = buildTheme({ primary: "#0a2463", radius: "0rem" })
+    // DaisyUI components (.input, .btn, .card, .badge) read these variables, which beat a rounded-none utility.
+    assert.equal(eitri(out)["--rounded-btn"], "0rem")
+    assert.equal(eitri(out)["--rounded-box"], "0rem")
+    assert.equal(eitri(out)["--rounded-badge"], "0rem")
     assert.deepEqual(out.v2.theme.borderRadius, {
-        xs: "0.125rem", sm: "0rem", md: "0rem", lg: "0rem", xl: "0rem", "2xl": "0rem", "3xl": "0rem", full: "9999px",
+        none: "0px", xs: "0.125rem", sm: "0rem", DEFAULT: "0rem", md: "0rem", lg: "0rem", xl: "0rem", "2xl": "0rem", "3xl": "0rem", full: "9999px",
     })
 })
 
@@ -139,4 +145,22 @@ test("rejects a color that is not hex, and a non-https font import", () => {
 test("contrastRatio matches the WCAG extremes", () => {
     assert.equal(contrastRatio("#000000", "#ffffff").toFixed(2), "21.00")
     assert.equal(contrastRatio("#777777", "#777777").toFixed(2), "1.00")
+})
+
+test("fontStack falls back to the family's own kind: serif, monospace or sans-serif", async () => {
+    const { fontStack } = await import("../lib/theme.mjs")
+    assert.equal(fontStack("EB Garamond"), '"EB Garamond", serif')
+    assert.equal(fontStack("Playfair Display"), '"Playfair Display", serif')
+    assert.equal(fontStack("Noto Serif"), '"Noto Serif", serif')
+    assert.equal(fontStack("IBM Plex Mono"), '"IBM Plex Mono", monospace')
+    assert.equal(fontStack("PT Sans"), '"PT Sans", sans-serif')
+    assert.equal(fontStack("Noto Sans Serif Display"), '"Noto Sans Serif Display", sans-serif')
+    assert.equal(fontStack("Figtree"), "Figtree, sans-serif")
+})
+
+test("a rounded brand's DaisyUI radii follow its radius, badges stay pills", () => {
+    const out = buildTheme({ primary: "#0a2463", radius: "0.75rem" })
+    assert.equal(eitri(out)["--rounded-btn"], "0.75rem")
+    assert.equal(eitri(out)["--rounded-box"], "0.5rem")
+    assert.equal(eitri(out)["--rounded-badge"], "1.9rem")
 })

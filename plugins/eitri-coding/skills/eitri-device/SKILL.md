@@ -38,7 +38,7 @@ remote config from the file, init params, storage in memory, HTTP made by Node (
 |---|---|
 | `--app <name>` | The workspace name from `app-config.yaml` (`home`, `cart`…): the id comes from `eitri workspace list`. Or `--workspace <id>` / `--url <url>`. |
 | `--config <file>` | The environment's remote config: create-app's `.eitri/remote-config.json`, or the `config` of `get_environment_config` saved to a file. Without it the app gets `{}` and most shopping screens stay on their skeleton. |
-| `--init "route=Categories&tabIndex=1"` | Initialization params, as a bottom tab or deep link passes them — the way to open a specific view. |
+| `--init "route=Categories&tabIndex=1"` | Initialization params, as a bottom tab or deep link passes them — the way to open a specific view. A URL-encoded JSON value arrives as an object, for views opened with state: `route=ProductCatalog&title=Promo&params=%7B%22facets%22%3A…%7D` renders the catalog a banner opens. |
 | `--compare <png>` | A reference screenshot (site-clone's `scrape/<slug>/screenshots/375-fullpage.png`): writes `compare/NN.png`, reference and app side by side per screen. |
 | `--headed` | For a person: a visible phone-sized window that stays open and usable (taps, scroll, in-app navigation) until it is closed; the tool prints, live, the mini-apps or links the app asks to open, which the browser does not follow. |
 | `--locale`, `--bp`, `--dpr`, `--wait` | Language (default: the config's `storePreferences.locale`), width (375), scale (1, like site-clone), settle time. |

@@ -1,17 +1,18 @@
 // Detects a store's e-commerce platform and the facts an Eitri app needs from
 // its home page HTML: account / shop domain, name, locale, currency, theme
-// color and icon candidates. Pure: the caller fetches the HTML.
+// color and the pages to capture. Pure: the caller fetches the HTML.
+// The app icon is chosen by icon.mjs (app-icon.mjs), which measures every source.
 
-const VTEX_HOSTS = /(?<![a-z0-9-])([a-z0-9][a-z0-9-]*)\.(?:vtexassets\.com|vteximg\.com\.br|vtexcommercestable\.com\.br|myvtex\.com)/gi
+const VTEX_HOSTS = /(?:(?<=%2F)|(?<![a-z0-9%-]))([a-z0-9][a-z0-9-]*)\.(?:vtexassets\.com|vteximg\.com\.br|vtexcommercestable\.com\.br|myvtex\.com)/gi
 /** Subdomains VTEX serves for every store: never an account. */
 const VTEX_SHARED = new Set(["cdnfiles", "io", "www", "api", "portal", "licensemanager", "assets", "master"])
 
-const WAKE_STORE_HOSTS = /(?<![a-z0-9-])([a-z0-9][a-z0-9-]*)\.fbitsstatic\.net/gi
+const WAKE_STORE_HOSTS = /(?:(?<=%2F)|(?<![a-z0-9%-]))([a-z0-9][a-z0-9-]*)\.fbitsstatic\.net/gi
 const WAKE_SHARED = new Set(["wake-components", "static", "recursos", "cdn"])
 const WAKE_PLATFORM = /(?:\bfbits\.net|\bwake\.tech)\b/gi
 
 const SHOPIFY_SHOP = /Shopify\.shop\s*=\s*["']([a-z0-9-]+\.myshopify\.com)["']/i
-const SHOPIFY_DOMAINS = /(?<![a-z0-9-])([a-z0-9][a-z0-9-]*\.myshopify\.com)/gi
+const SHOPIFY_DOMAINS = /(?:(?<=%2F)|(?<![a-z0-9%-]))([a-z0-9][a-z0-9-]*\.myshopify\.com)/gi
 const SHOPIFY_CDN = /cdn\.shopify\.com/gi
 
 /** Below this score a platform guess is noise (e.g. one image hotlinked from another store). */
@@ -131,35 +132,6 @@ function detectCurrency(text, platform) {
     return undefined
 }
 
-function iconSize(sizes) {
-    const sides = (sizes ?? "").split(/\s+/).map((s) => Number(s.toLowerCase().split("x")[0]) || 0)
-    return Math.max(0, ...sides)
-}
-
-/**
- * Icon URLs to try with upload_application_icon, best first: declared PNG/JPEG/WebP
- * icons (apple-touch first, largest first), the well-known apple-touch path, then
- * the .ico favicons (the MCP converts them to PNG: small, but every store has one)
- * ending with the well-known /favicon.ico. SVG is dropped: the upload takes raster images.
- */
-function iconCandidates(links, pageUrl) {
-    const origin = new URL(pageUrl).origin
-    const icons = links
-        .map((l) => ({ rel: (l.rel ?? "").toLowerCase().split(/\s+/), href: l.href, type: (l.type ?? "").toLowerCase(), sizes: l.sizes }))
-        .filter((l) => l.href && (l.rel.includes("icon") || l.rel.some((r) => r.startsWith("apple-touch-icon"))))
-        .filter((l) => !/\.svg$/i.test(l.href.split(/[?#]/)[0]) && !/svg/.test(l.type))
-        .map((l) => ({
-            url: new URL(l.href, pageUrl).toString(),
-            apple: l.rel.some((r) => r.startsWith("apple-touch-icon")),
-            size: iconSize(l.sizes),
-            ico: /\.ico$/i.test(l.href.split(/[?#]/)[0]) || /icon/.test(l.type),
-        }))
-        .sort((a, b) => Number(b.apple) - Number(a.apple) || b.size - a.size)
-    const raster = icons.filter((i) => !i.ico).map((i) => i.url)
-    const favicons = icons.filter((i) => i.ico).map((i) => i.url)
-    return [...new Set([...raster, `${origin}/apple-touch-icon.png`, ...favicons, `${origin}/favicon.ico`])]
-}
-
 // Besides the home, the pages whose look the app's other screens copy (PDP, cart, account):
 // a product link found on the home, and each platform's fixed cart and login paths.
 const PAGE_RULES = {
@@ -220,7 +192,6 @@ export function detectStore({ url, html }) {
         locale: htmlLang ?? cultureLocale,
         currency: detectCurrency(text, detected),
         themeColor: metaContent(metas, "theme-color"),
-        iconCandidates: iconCandidates(links, url),
         pages: pagesToCapture(detected, url, tags(html, "a")),
     }
 }
@@ -243,4 +214,41 @@ export function withVtexTenant(profile, tenant) {
     if (!out.currency && currency) out.currency = currency
     if (!out.locale && locale) out.locale = locale
     return out
+}
+
+/**
+ * VTEX's public default sales channel. Unlike the tenant endpoint (VTEX IO accounts
+ * only: 404 elsewhere), every account answers it with its currency and culture.
+ */
+export function vtexSalesChannelUrl(account) {
+    return `https://${account}.vtexcommercestable.com.br/api/catalog_system/pub/saleschannel/default`
+}
+
+/** Fills the currency and locale still missing from the default sales channel. The page's own values win. */
+export function withVtexSalesChannel(profile, channel) {
+    if (!channel || typeof channel !== "object") return profile
+    const out = { ...profile }
+    if (!out.currency && typeof channel.CurrencyCode === "string" && /^[A-Z]{3}$/.test(channel.CurrencyCode)) out.currency = channel.CurrencyCode
+    if (!out.locale && typeof channel.CultureInfo === "string" && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,4})?$/.test(channel.CultureInfo)) out.locale = channel.CultureInfo
+    return out
+}
+
+/** VTEX's public catalog search: the account's best sellers (the most representative PDP), each with its linkText and stock. */
+export function vtexProductSearchUrl(account) {
+    return `https://${account}.vtexcommercestable.com.br/api/catalog_system/pub/products/search?_from=0&_to=9&O=OrderByTopSaleDESC`
+}
+
+/**
+ * A home without product links (banners and category tiles only) leaves the PDP capture
+ * without a page: take one from the catalog search, in stock first, as `<host>/<linkText>/p`
+ * (VTEX's product route on every storefront). A product link found on the page wins.
+ */
+export function withVtexProduct(profile, products) {
+    if (!profile?.pages || profile.pages.product || !Array.isArray(products)) return profile
+    const listed = products.filter((p) => p && typeof p.linkText === "string" && p.linkText)
+    const inStock = (p) => (p.items ?? []).some((item) => (item?.sellers ?? []).some((s) => s?.commertialOffer?.AvailableQuantity > 0))
+    const pick = listed.find(inStock) ?? listed[0]
+    if (!pick) return profile
+    const origin = new URL(profile.host ?? profile.url).origin
+    return { ...profile, pages: { ...profile.pages, product: `${origin}/${encodeURIComponent(pick.linkText)}/p` } }
 }

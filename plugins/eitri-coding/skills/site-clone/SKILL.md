@@ -102,7 +102,7 @@ scrape/<slug>/
     fonts.json           families in use, @font-face, downloaded files
   content/
     copy.md              all human copy, grouped by section
-    outline.json         headings, links, buttons, inputs, alts, in document order
+    outline.json         headings, links, buttons, inputs, images (alt, link, rendered box), in document order
   assets/
     images/ fonts/       only assets the DOM or a matching rule actually references
     images.json svgs.json   inline SVGs deduplicated, most-used first

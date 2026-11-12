@@ -12,6 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { pathToFileURL } from 'node:url'
 
 /* ------------------------------------------------------------------ args -- */
 
@@ -43,6 +44,9 @@ site-clone capture engine
                        npx playwright open --save-storage=auth.json <url>
   --header "K: V"    extra request headers, comma-separated for several
   --timeout <ms>     navigation timeout                (default: 60000)
+  --probe <module>   a module whose default export runs in the primary page
+                     (page.evaluate); its result goes to probe.json
+                     (create-app: scripts/lib/componentsProbe.mjs)
 `)
   process.exit(argv.length && !flag('help') ? 1 : 0)
 }
@@ -307,8 +311,21 @@ window.__sc = (function () {
         try { same = !!f.contentDocument } catch (e) {}
         frames.push({ src: f.src || '(srcdoc)', size: [Math.round(r.width), Math.round(r.height)], sameOrigin: same });
       });
+      // Custom elements: third-party widgets (stories, reviews, chat) mount as web components; one still showing its
+      // loading skeleton when captured holds none of its real content.
+      var custom = {};
+      document.querySelectorAll('*').forEach(function (e) {
+        var tag = e.tagName.toLowerCase();
+        if (tag.indexOf('-') < 0) return;
+        var c = custom[tag] || (custom[tag] = { tag: tag, count: 0, placeholder: false });
+        c.count++;
+        var busy = e.getAttribute('aria-busy') === 'true' ||
+          [].some.call(e.querySelectorAll('*'), function (d) { return [].some.call(d.attributes, function (a) { return /skeleton|placeholder|loading/i.test(a.name) || /skeleton/i.test(a.value) }) });
+        if (busy && !(e.textContent || '').trim()) c.placeholder = true;
+      });
       return {
         shadowHosts: hosts,
+        customElements: Object.keys(custom).map(function (k) { return custom[k] }).slice(0, 40),
         iframes: frames,
         canvases: document.querySelectorAll('canvas').length,
         openDialogs: document.querySelectorAll('dialog[open],[aria-modal="true"]').length
@@ -468,7 +485,14 @@ const collectOutline = () => {
       const sec = c.closest('[data-sc-section]')
       const s = sec ? Number(sec.getAttribute('data-sc-section')) : null
       if (/^h[1-6]$/.test(t)) out.push({ section: s, type: t, text: c.textContent.replace(/\s+/g, ' ').trim() })
-      else if (t === 'img') out.push({ section: s, type: 'img', alt: c.alt || '', src: c.currentSrc || c.src })
+      else if (t === 'img') {
+        // The link an image sits in is where a banner leads, and its rendered box tells a slide (one per
+        // screen) from tiles side by side: without them the capture loses every banner's destination and layout.
+        const link = c.closest('a[href]')
+        const r = c.getBoundingClientRect()
+        const box = [r.left + window.scrollX, r.top + window.scrollY, r.width, r.height].map(Math.round)
+        out.push({ section: s, type: 'img', alt: c.alt || '', src: c.currentSrc || c.src, box, ...(link ? { href: link.href } : {}) })
+      }
       else if (t === 'a' && c.textContent.trim()) out.push({ section: s, type: 'link', text: c.textContent.replace(/\s+/g, ' ').trim().slice(0, 200), href: c.href })
       else if (t === 'button' && c.textContent.trim()) out.push({ section: s, type: 'button', text: c.textContent.replace(/\s+/g, ' ').trim().slice(0, 120) })
       else if ((t === 'input' || t === 'textarea' || t === 'select')) out.push({ section: s, type: t, inputType: c.type || '', placeholder: c.placeholder || '', label: (c.labels && c.labels[0] ? c.labels[0].textContent.trim() : '') })
@@ -531,7 +555,7 @@ const collectSvgs = () => {
     if (map.has(key)) { map.get(key).uses++; continue }
     map.set(key, {
       uses: 1,
-      name: s.getAttribute('aria-label') || s.querySelector('title')?.textContent?.trim() || (s.closest('[class]')?.className || '').toString().split(/\s+/)[0] || 'icon',
+      name: s.getAttribute('aria-label') || s.querySelector('title')?.textContent?.trim() || (s.closest('[class]')?.getAttribute('class') || '').trim().split(/\s+/)[0] || 'icon',
       section: sec ? Number(sec.getAttribute('data-sc-section')) : null,
       viewBox: s.getAttribute('viewBox') || '',
       size: [Math.round(s.getBoundingClientRect().width), Math.round(s.getBoundingClientRect().height)],
@@ -743,7 +767,10 @@ const FIND_POPUP = () => {
   const overlays = [...document.body.querySelectorAll('*')].filter(el => {
     if (getComputedStyle(el).position !== 'fixed' || !visible(el) || el.hasAttribute('data-sc-stuck')) return false
     const r = el.getBoundingClientRect()
-    if (r.width < innerWidth * 0.6 || r.height < innerHeight * 0.5) return false
+    // What it covers of the screen, not its size: a drawer parked off-canvas covers nothing.
+    const shownW = Math.min(r.right, innerWidth) - Math.max(r.left, 0)
+    const shownH = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)
+    if (shownW < innerWidth * 0.6 || shownH < innerHeight * 0.5) return false
     return !el.querySelector('main') && el.getElementsByTagName('*').length < Math.max(600, total * 0.5) && paints(el)
   }).filter((el, _, all) => !all.some(o => o !== el && o.contains(el)))
   const CLOSE_TEXT = /^(×|✕|✖|✗|x|fechar|close|cerrar|schließen|não, obrigado|nao, obrigado|no thanks)$/i
@@ -821,6 +848,33 @@ async function dismissOverlays (page) {
   return done
 }
 
+// In-page: fixed layers that are not on screen — drawers parked outside the viewport (bottom: -100%,
+// right: -100%…) and panels waiting at opacity 0 (a mini-cart) — are hidden, so a full-page shot (which
+// stretches the viewport) does not paint them over the page and nothing reads their content as the page's.
+const HIDE_OFF_CANVAS = () => {
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '')
+  const hidden = []
+  for (const el of document.body.querySelectorAll('*')) {
+    if (el.hasAttribute('data-sc-offcanvas')) continue
+    const cs = getComputedStyle(el)
+    if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue
+    const r = el.getBoundingClientRect()
+    const outside = r.top >= innerHeight || r.bottom <= 0 || r.left >= innerWidth || r.right <= 0
+    if (!outside && Number(cs.opacity) > 0.05) continue
+    if (!el.textContent.trim() && !el.querySelector('img, svg, video')) continue
+    el.setAttribute('data-sc-offcanvas', '')
+    hidden.push(describe(el))
+  }
+  if (hidden.length && !document.getElementById('sc-offcanvas')) {
+    const style = document.createElement('style')
+    style.id = 'sc-offcanvas'
+    style.textContent = '[data-sc-offcanvas], [data-sc-offcanvas] * { visibility: hidden !important }'
+    document.head.appendChild(style)
+  }
+  return hidden
+}
+
 /** Brings the page to the state the capture records; returns the dismissal notes. */
 async function settle (page) {
   const notes = await dismissOverlays(page)
@@ -839,7 +893,10 @@ async function settle (page) {
   // Consent banners and marketing popups often show up seconds after load, or on scroll.
   const late = await dismissOverlays(page)
   if (late.length) await page.waitForTimeout(600)
-  return [...notes, ...late]
+  let offCanvas = []
+  try { offCanvas = await page.evaluate(HIDE_OFF_CANVAS) } catch {}
+  const parked = offCanvas.length ? [`Hid ${offCanvas.length} off-canvas layer(s) (drawers outside the screen or at opacity 0) before capturing: ${offCanvas.slice(0, 6).join(', ')}.`] : []
+  return [...notes, ...late, ...parked]
 }
 
 async function loadChromium () {
@@ -966,11 +1023,17 @@ async function main () {
   const design = await safe('design tokens', () => primaryPage.evaluate(collectDesign),
     { cssVariables: {}, sampled: 0, typographyByTag: {}, frequencies: {}, fontUsage: [] })
   const outline = await safe('content outline', () => primaryPage.evaluate(collectOutline), [])
+  if (opt('probe')) {
+    const probeFn = (await import(pathToFileURL(path.resolve(opt('probe'))).href)).default
+    const probed = await safe('probe', () => primaryPage.evaluate(probeFn), null)
+    fs.mkdirSync(OUT, { recursive: true })
+    fs.writeFileSync(path.join(OUT, 'probe.json'), JSON.stringify(probed, null, 2))
+  }
   const behaviors = await safe('behaviors', () => primaryPage.evaluate(collectBehaviors),
     { pinned: [], horizontalScrollers: [], disclosure: [], overlays: [], animated: [], forms: [], globals: [], autoplayMedia: [] })
   const svgs = await safe('inline svgs', () => primaryPage.evaluate(collectSvgs), [])
   const census = await safe('census', () => primaryPage.evaluate(() => window.__sc.census()),
-    { shadowHosts: 0, iframes: [], canvases: 0, openDialogs: 0 })
+    { shadowHosts: 0, customElements: [], iframes: [], canvases: 0, openDialogs: 0 })
 
   log('css: matching rules against the rendered DOM')
   const cssSheets = [...responses.entries()]
@@ -1169,7 +1232,9 @@ async function main () {
   if (sectionIndex.length > 30) warnings.push(`${sectionIndex.length} sections is unusually many — the split has probably fragmented. Compare against screenshots/ and re-run with --sections.`)
   if (!sectionIndex.length) warnings.push('No sections detected — the page may be blocked, empty, or behind a consent wall. Check screenshots/, then re-run with --sections.')
   if (census.shadowHosts) warnings.push(`${census.shadowHosts} shadow root(s): trees include their contents, and scoped rules are in css/shadow.css (NOT applied by snapshot.html).`)
-  for (const f of census.iframes) warnings.push(`iframe ${f.sameOrigin ? '(same-origin)' : '(cross-origin — not captured at all)'} ${f.size.join('x')}: ${f.src}`)
+  for (const f of census.iframes) warnings.push(`iframe ${f.sameOrigin ? '(same-origin)' : '(cross-origin — not captured at all)'} ${f.size.join('x')}: ${shortSrc(f.src)}`)
+  const loading = (census.customElements || []).filter(e => e.placeholder).map(e => `<${e.tag}>`)
+  if (loading.length) warnings.push(`${loading.length} widget(s) were still loading when captured (${loading.join(', ')}): their content is not in this bundle. See README → Third-party widgets.`)
   if (census.canvases) warnings.push(`${census.canvases} <canvas> element(s): pixels only, no structure. Screenshots are all you get.`)
   if (css.kept.length < 50) warnings.push(`Only ${css.kept.length} CSS rules matched — suspiciously few. The page may render from inline styles, or stylesheets failed to parse.`)
   if (!images.length && !flag('no-assets')) warnings.push('No images kept. If the page has images, they may be loaded in a way the capture missed.')
@@ -1193,16 +1258,48 @@ async function main () {
     },
     stylesheets: { parsed: css.parsed, total: css.total, failed: css.failed },
     census,
+    thirdParty: { hosts: thirdPartyHosts(network, TARGET), customElements: census.customElements || [] },
     warnings
   })
 
-  wTXT(path.join(OUT, 'README.md'), readme({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings }))
+  wTXT(path.join(OUT, 'README.md'), readme({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings, thirdParty: { hosts: thirdPartyHosts(network, TARGET), customElements: census.customElements || [] } }))
   console.log(`\n✓ ${sectionIndex.length} sections · ${css.kept.length} css rules · ${images.length} images · ${fonts.length} fonts`)
   for (const w of warnings) console.log('  ! ' + w)
   console.log(`  open ${path.join(OUT, 'README.md')}\n`)
 }
 
 /* ---------------------------------------------------------------- readme -- */
+
+/** The domain a host belongs to: the last two labels, three under a country's second level (store.com.br). */
+function siteOf (host) {
+  const labels = host.toLowerCase().split('.')
+  const n = labels.length >= 3 && labels.at(-1).length === 2 && /^(com|net|org|gov|edu|co)$/.test(labels.at(-2)) ? 3 : 2
+  return labels.slice(-n).join('.')
+}
+
+/** Third-party domains the page requested, most requests first; the store's own (its name in the host) are left out. */
+function thirdPartyHosts (network, target) {
+  let own = ''
+  try { own = siteOf(new URL(target).hostname).split('.')[0] } catch {}
+  const counts = {}
+  for (const r of network || []) {
+    let host
+    try { host = new URL(r.url).hostname } catch { continue }
+    if (!/^https?:/.test(r.url) || (own && host.includes(own))) continue
+    const site = siteOf(host)
+    counts[site] = (counts[site] || 0) + 1
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([host, requests]) => ({ host, requests }))
+}
+
+/** An iframe source fit for a one-line warning: an inline data: document by its type and length, a long URL cut. */
+function shortSrc (src = '') {
+  if (src.startsWith('data:')) {
+    const end = src.search(/[,;]/)
+    return `${src.slice(0, end > 0 ? end : 40)} (inline, ${src.length} chars)`
+  }
+  return src.length > 200 ? `${src.slice(0, 200)}…` : src
+}
 
 function table (title, obj, cols = ['value', 'uses']) {
   const rows = Object.entries(obj || {})
@@ -1211,7 +1308,7 @@ function table (title, obj, cols = ['value', 'uses']) {
     rows.map(([k, v]) => `| \`${k}\` | ${v} |`).join('\n') + '\n\n'
 }
 
-function readme ({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings }) {
+function readme ({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings, thirdParty }) {
   const f = design.frequencies
   let md = `# Capture — ${TARGET}
 ${warnings.length ? '\n> **Check these before building.**\n' + warnings.map(w => '> - ' + w).join('\n') + '\n' : ''}
@@ -1295,6 +1392,15 @@ Playwright MCP and note what you find.
 
 Only assets actually referenced by the DOM or by a matching CSS rule are kept;
 tracking pixels and third-party beacons are dropped.
+
+## Third-party widgets and services
+
+Reviews, video stories, chat and analytics load from other domains and often mount as custom
+elements. A rebuild does not get them for free: decide for each whether the target can integrate it.
+
+${(thirdParty?.customElements || []).map(e => `- \`<${e.tag}>\` ×${e.count}${e.placeholder ? ' — still loading when captured: its content is not in this bundle' : ''}`).join('\n') || '- no custom elements'}
+
+${(thirdParty?.hosts || []).length ? '| domain | requests |\n|---|---|\n' + thirdParty.hosts.map(h => `| ${h.host} | ${h.requests} |`).join('\n') : 'No third-party requests.'}
 
 ## Coverage caveats
 

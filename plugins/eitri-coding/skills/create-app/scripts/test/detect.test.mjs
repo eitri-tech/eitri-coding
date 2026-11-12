@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { detectStore, withVtexTenant, vtexTenantUrl } from "../lib/detect.mjs"
+import { detectStore, withVtexTenant, vtexTenantUrl, withVtexSalesChannel, vtexSalesChannelUrl, withVtexProduct, vtexProductSearchUrl } from "../lib/detect.mjs"
+import { iconSources } from "../lib/icon.mjs"
 
 // Fixtures are trimmed from the real home pages of each platform (Nov 2026):
 // only the markers detection reads are kept.
@@ -67,25 +68,35 @@ test("VTEX IO: account from the runtime, culture locale and currency, decoded st
     assert.equal(out.storeName, "C&A")
 })
 
-test("icon candidates: largest declared PNG first, relative links resolved, well-known paths last, favicon.ico the final fallback", () => {
-    const out = detectStore({ url: "https://www.cea.com.br/", html: VTEX_IO })
-    assert.deepEqual(out.iconCandidates, [
-        "https://cea.vtexassets.com/arquivos/apple-180.png",
-        "https://www.cea.com.br/arquivos/cea-2025-favicon-96x96.png",
-        "https://www.cea.com.br/apple-touch-icon.png",
-        "https://www.cea.com.br/favicon.ico",
+test("icon choice moved to app-icon.mjs: detection no longer lists icon candidates", () => {
+    assert.equal("iconCandidates" in detectStore({ url: "https://www.cea.com.br/", html: VTEX_IO }), false)
+})
+
+// iconSources over the same real pages: declared icons resolved (relative, protocol-relative, with queries),
+// the well-known paths added, an .ico recognized despite its query string.
+const kinds = (html, pageUrl) => iconSources({ html, pageUrl }).sources.map((s) => [s.url, s.kind])
+
+test("icon sources (C&A): the declared PNG favicon and apple-touch-icon, then the well-known paths", () => {
+    assert.deepEqual(kinds(VTEX_IO, "https://www.cea.com.br/"), [
+        ["https://www.cea.com.br/arquivos/cea-2025-favicon-96x96.png", "icon"],
+        ["https://cea.vtexassets.com/arquivos/apple-180.png", "apple-touch-icon"],
+        ["https://www.cea.com.br/apple-touch-icon.png", "apple-touch-icon"],
+        ["https://www.cea.com.br/apple-touch-icon-precomposed.png", "apple-touch-icon"],
+        ["https://www.cea.com.br/favicon.ico", "favicon"],
     ])
 })
 
-test("a store whose only icon is an .ico favicon still gets it, after the well-known PNG path", () => {
-    // chegueiembalagens.com.br (Nov 2026): one 40×40 .ico, no apple-touch-icon (the well-known path is a 404).
-    const html = `<html lang="pt-BR"><head><title>Cheguei Embalagens</title><link rel="icon" href="https://chegueiembalagens.vteximg.com.br/arquivos/cheguei-favico.ico"></head></html>`
-    const out = detectStore({ url: "https://www.chegueiembalagens.com.br/", html })
-    assert.deepEqual(out.iconCandidates, [
-        "https://www.chegueiembalagens.com.br/apple-touch-icon.png",
-        "https://chegueiembalagens.vteximg.com.br/arquivos/cheguei-favico.ico",
-        "https://www.chegueiembalagens.com.br/favicon.ico",
-    ])
+test("icon sources: an .ico on a CDN with a query string is a favicon; protocol-relative Shopify URLs resolve", () => {
+    assert.deepEqual(kinds(UNKNOWN, "https://www.mundoverde.com.br/")[0], ["https://d5ekw4ckgpula.cloudfront.net/favicon.ico?v=1", "favicon"])
+    assert.deepEqual(kinds(SHOPIFY, "https://dlk.com.br/")[0], ["https://dlk.com.br/cdn/shop/files/icon.png?v=1&width=180", "apple-touch-icon"])
+    assert.deepEqual(kinds(WAKE, "https://www.balaroti.com.br/")[0], ["https://balaroti.fbitsstatic.net/sf/img/apple-touch-icon.png", "apple-touch-icon"])
+})
+
+test("icon sources: an SVG icon is a candidate (rasterized at 512), a mask-icon is not", () => {
+    const html = `<html><head><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="mask-icon" href="/mask.svg"></head></html>`
+    const urls = kinds(html, "https://www.loja.com.br/").map(([url]) => url)
+    assert.ok(urls.includes("https://www.loja.com.br/icon.svg"))
+    assert.ok(!urls.includes("https://www.loja.com.br/mask.svg"))
 })
 
 test("VTEX FastStore: account from the store config, name before the colon, theme color, JSON-LD currency", () => {
@@ -108,11 +119,6 @@ test("Wake: account from the store's fbitsstatic host, not the shared components
     assert.equal(out.platform, "WAKE")
     assert.equal(out.account, "balaroti")
     assert.equal(out.storeName, "Balaroti")
-    assert.deepEqual(out.iconCandidates, [
-        "https://balaroti.fbitsstatic.net/sf/img/apple-touch-icon.png",
-        "https://www.balaroti.com.br/apple-touch-icon.png",
-        "https://www.balaroti.com.br/favicon.ico",
-    ])
 })
 
 test("Shopify: shop domain and currency from the Shopify globals, despite a stray VTEX image", () => {
@@ -122,26 +128,15 @@ test("Shopify: shop domain and currency from the Shopify globals, despite a stra
     assert.equal(out.account, undefined)
     assert.equal(out.currency, "BRL")
     assert.equal(out.storeName, "DLK")
-    assert.equal(out.iconCandidates[0], "https://dlk.com.br/cdn/shop/files/icon.png?v=1&width=180")
 })
 
-test("an unknown platform is reported as null with no evidence; a declared .ico comes after the PNG paths", () => {
+test("an unknown platform is reported as null with no evidence", () => {
     const out = detectStore({ url: "https://www.mundoverde.com.br/", html: UNKNOWN })
     assert.equal(out.platform, null)
     assert.deepEqual(out.evidence, [])
     assert.equal(out.storeName, "Mundo Verde")
-    assert.deepEqual(out.iconCandidates, [
-        "https://www.mundoverde.com.br/apple-touch-icon.png",
-        "https://d5ekw4ckgpula.cloudfront.net/favicon.ico?v=1",
-        "https://www.mundoverde.com.br/favicon.ico",
-    ])
 })
 
-test("SVG icons are never candidates: the upload takes raster images only", () => {
-    const html = `<html><head><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="mask-icon" href="/mask.svg"></head></html>`
-    const out = detectStore({ url: "https://www.loja.com.br/", html })
-    assert.deepEqual(out.iconCandidates, ["https://www.loja.com.br/apple-touch-icon.png", "https://www.loja.com.br/favicon.ico"])
-})
 
 test("store name: the title segment that names the domain wins over the first one", () => {
     const html = `<html lang="pt-BR"><head><title data-react-helmet="true">Celulares com 128GB, 256GB, 512GB e 1TB | Motorola Oficial</title></head></html>`
@@ -196,4 +191,50 @@ test("pages to capture besides the home: the first product link, the platform's 
     // No product link on the home: the product page is left for the agent to pick from the capture.
     assert.equal(detectStore({ url: "https://compre.seara.com.br/", html: VTEX_FASTSTORE }).pages.product, null)
     assert.equal(detectStore({ url: "https://example.com/", html: "<html><title>x</title></html>" }).pages, null)
+})
+
+test("VTEX sales channel: fills currency and locale when the tenant endpoint answers 404 (non-IO accounts)", () => {
+    const channel = { Id: 1, CultureInfo: "pt-BR", CurrencyCode: "BRL", CurrencySymbol: "R$" }
+    const out = withVtexSalesChannel({ platform: "VTEX", account: "lojafarm", locale: undefined }, channel)
+    assert.equal(out.currency, "BRL")
+    assert.equal(out.locale, "pt-BR")
+    assert.equal(vtexSalesChannelUrl("lojafarm"), "https://lojafarm.vtexcommercestable.com.br/api/catalog_system/pub/saleschannel/default")
+    // The page's own values win; a malformed answer changes nothing.
+    const declared = { platform: "VTEX", currency: "ARS", locale: "es-AR" }
+    assert.deepEqual(withVtexSalesChannel(declared, channel), declared)
+    assert.deepEqual(withVtexSalesChannel({ platform: "VTEX" }, { CurrencyCode: "reais" }), { platform: "VTEX" })
+    assert.deepEqual(withVtexSalesChannel({ platform: "VTEX" }, null), { platform: "VTEX" })
+})
+
+test("VTEX product page: a home without product links takes one in stock from the public catalog search", () => {
+    const offer = (qty) => ({ sellers: [{ commertialOffer: { AvailableQuantity: qty } }] })
+    const products = [
+        { linkText: "presilha-sem-estoque-1", items: [offer(0)] },
+        { linkText: "vestido-midi-estampado-372285-59587", items: [offer(0), offer(3)] },
+    ]
+    const profile = {
+        platform: "VTEX",
+        host: "https://www.farmrio.com.br",
+        pages: { product: null, cart: "https://www.farmrio.com.br/checkout/#/cart", login: "https://www.farmrio.com.br/login" },
+    }
+    const out = withVtexProduct(profile, products)
+    assert.equal(out.pages.product, "https://www.farmrio.com.br/vestido-midi-estampado-372285-59587/p")
+    assert.equal(out.pages.cart, profile.pages.cart)
+    assert.equal(profile.pages.product, null, "the input is not mutated")
+    assert.equal(vtexProductSearchUrl("lojafarm"), "https://lojafarm.vtexcommercestable.com.br/api/catalog_system/pub/products/search?_from=0&_to=9&O=OrderByTopSaleDESC")
+    // Nothing in stock: the first product still beats no product page.
+    assert.equal(withVtexProduct(profile, [products[0]]).pages.product, "https://www.farmrio.com.br/presilha-sem-estoque-1/p")
+    // A product link found on the home wins; a malformed answer changes nothing.
+    const found = { ...profile, pages: { ...profile.pages, product: "https://www.farmrio.com.br/x/p" } }
+    assert.deepEqual(withVtexProduct(found, products), found)
+    assert.deepEqual(withVtexProduct(profile, { error: "x" }), profile)
+    assert.deepEqual(withVtexProduct(profile, [{ items: [] }]), profile)
+})
+
+test("VTEX asset hosts URL-encoded in an image proxy (https%3A%2F%2Flojaq.vtexassets.com) count for the account, not as '2flojaq'", () => {
+    const html = `<html><head><title>Loja Q</title></head><body>
+<img src="https://img.cdn.example/rs:fit/https%3A%2F%2Flojaq.vtexassets.com/a.png"><img src="https://img.cdn.example/https%3a%2f%2flojaq.vtexassets.com/b.png"><img src="https://lojaq.vtexassets.com/c.png"></body></html>`
+    const profile = detectStore({ url: "https://www.lojaq.com.br/", html })
+    assert.equal(profile.account, "lojaq")
+    assert.deepEqual(profile.evidence, ["lojaq VTEX asset host ×3"])
 })

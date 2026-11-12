@@ -100,3 +100,16 @@ test("i18n.mjs check reports every mini-app and fails until each has en and pt",
     const passing = spawnSync(process.execPath, [script, "check", "--repo", repo], { encoding: "utf8" })
     assert.equal(passing.status, 0, passing.stdout)
 })
+
+test("a key with i18next plural forms (key_one, key_other…) is defined", () => {
+    const plural = { list: { count_one: "{{count}} produto", count_other: "{{count}} produtos" } }
+    const report = checkMiniApp({
+        name: "home",
+        locales: { pt: plural, en: { list: { count_one: "{{count}} product", count_other: "{{count}} products" } } },
+        used: new Set(["list.count"]),
+    })
+    assert.deepEqual(report.errors, [])
+    // A plural form in one language only is still a missing key.
+    const partial = checkMiniApp({ name: "home", locales: { pt: plural, en: { list: { count_one: "{{count}} product" } } }, used: new Set(["list.count"]) })
+    assert.ok(partial.errors.some((e) => e.includes("list.count_other")), partial.errors.join("\n"))
+})

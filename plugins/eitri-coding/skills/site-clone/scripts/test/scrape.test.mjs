@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -87,4 +87,64 @@ test('a popup that opens again late (when its trigger scrolls into view) is clos
     if (r > 200 && g < 60 && b > 200) magenta++
   }
   assert.equal(magenta, 0, 'the footer shot shows the popup')
+})
+
+test('an inline data: iframe is reported by its type and size, not by its whole source', { timeout: 150000 }, () => {
+  const dir = capture('data-iframe.html')
+  const { warnings } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
+  const iframe = warnings.find(w => /^iframe/.test(w))
+  assert.ok(iframe, `the iframe is reported: ${warnings.join(' | ')}`)
+  assert.match(iframe, /data:text\/html/)
+  assert.ok(warnings.every(w => w.length < 400), `no warning carries a whole inline document (longest: ${Math.max(...warnings.map(w => w.length))} chars)`)
+})
+
+test('custom elements are reported, and one still on its loading skeleton is flagged: its content is not in the bundle', { timeout: 150000 }, () => {
+  const dir = capture('widgets.html')
+  const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
+  const byTag = Object.fromEntries(manifest.thirdParty.customElements.map(e => [e.tag, e]))
+  assert.equal(byTag['demo-stories'].placeholder, true)
+  assert.equal(byTag['my-carousel'].placeholder, false)
+  assert.ok(Array.isArray(manifest.thirdParty.hosts))
+  assert.ok(manifest.warnings.some(w => /still loading/.test(w) && /demo-stories/.test(w)), manifest.warnings.join(' | '))
+  const readme = readFileSync(join(dir, 'README.md'), 'utf8')
+  assert.match(readme, /## Third-party widgets and services/)
+  assert.match(readme, /`<demo-stories>`.*still loading/)
+})
+
+test('outline images carry the link they sit in, so a banner keeps its destination', { timeout: 150000 }, () => {
+  const dir = capture('linked-images.html')
+  const outline = JSON.parse(readFileSync(join(dir, 'content', 'outline.json'), 'utf8'))
+  const linked = outline.find(o => o.type === 'img' && o.alt === 'banner vestidos')
+  assert.ok(linked, 'the linked image is in the outline')
+  assert.match(linked.href ?? '', /\/produtos\/vestidos$/)
+  assert.deepEqual(linked.box.slice(2), [300, 200], 'the rendered size, to tell a slide from a tile')
+  const plain = outline.find(o => o.type === 'img' && o.alt === 'sem link')
+  assert.ok(plain && !('href' in plain), 'an image outside a link has no href')
+})
+
+test('--probe runs a module in the captured page and writes its answer to probe.json', { timeout: 150000 }, () => {
+  const mod = join(mkdtempSync(join(tmpdir(), 'probe-')), 'probe.mjs')
+  writeFileSync(mod, 'export default function () { return { images: document.querySelectorAll("img").length, width: window.innerWidth } }')
+  const dir = capture('linked-images.html', '--probe', mod)
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'probe.json'), 'utf8')), { images: 2, width: 375 })
+})
+
+test('off-canvas drawers (fixed outside the screen, or transparent) are hidden before the shots, not reported as popups', { timeout: 150000 }, () => {
+  const mod = join(mkdtempSync(join(tmpdir(), 'probe-')), 'probe.mjs')
+  writeFileSync(mod, 'export default function () { return { guide: getComputedStyle(document.querySelector("#guide .panel")).visibility, minicart: getComputedStyle(document.querySelector("#minicart")).visibility, title: getComputedStyle(document.querySelector("h1")).visibility } }')
+  const dir = capture('offcanvas.html', '--probe', mod)
+  const { warnings } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
+  assert.ok(!warnings.some(w => /covers the page/.test(w)), warnings.join(' | '))
+  assert.ok(warnings.some(w => /off-canvas/.test(w) && /#guide/.test(w)), warnings.join(' | '))
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'probe.json'), 'utf8')), { guide: 'hidden', minicart: 'hidden', title: 'visible' })
+  const shot = readPng(join(dir, 'screenshots', '375-fullpage.png'))
+  let red = 0
+  for (let y = 0; y < shot.height; y += 10) for (let x = 0; x < shot.width; x += 10) { const [r, g, b] = shot.rgb(x, y); if (r > 200 && g < 40 && b < 40) red++ }
+  assert.equal(red, 0, 'the drawer is not painted into the full-page shot')
+})
+
+test('inline svgs are named by their own class (an SVG className is not a string), else their container', { timeout: 150000 }, () => {
+  const dir = capture('svg-icons.html')
+  const names = JSON.parse(readFileSync(join(dir, 'assets', 'svgs.json'), 'utf8')).map(s => s.name).sort()
+  assert.deepEqual(names, ['icon-cart', 'search-box'])
 })

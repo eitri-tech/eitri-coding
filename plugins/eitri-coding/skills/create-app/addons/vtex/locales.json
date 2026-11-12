@@ -1,0 +1,6 @@
+{
+	"home": {
+		"pt": { "countdown": { "title": "Faltam", "days": "Dias", "hours": "Horas", "minutes": "Minutos", "seconds": "Segundos" } },
+		"en": { "countdown": { "title": "Ends in", "days": "Days", "hours": "Hours", "minutes": "Minutes", "seconds": "Seconds" } }
+	}
+}

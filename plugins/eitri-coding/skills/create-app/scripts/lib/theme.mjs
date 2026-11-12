@@ -98,12 +98,19 @@ function normalizeColor(value, name) {
 function radiusScale(md) {
     const square = /^0(?:\.0+)?(?:rem|px)?$/.test(md)
     const fixed = (value) => (square ? md : value)
-    return { xs: "0.125rem", sm: fixed("0.25rem"), md, lg: fixed("0.5rem"), xl: fixed("0.75rem"), "2xl": fixed("1rem"), "3xl": fixed("1.5rem"), full: "9999px" }
+    // theme.borderRadius replaces Tailwind's scale: keep `none` and `DEFAULT` or `rounded-none` / `rounded` draw nothing.
+    return { none: "0px", xs: "0.125rem", sm: fixed("0.25rem"), DEFAULT: fixed("0.25rem"), md, lg: fixed("0.5rem"), xl: fixed("0.75rem"), "2xl": fixed("1rem"), "3xl": fixed("1.5rem"), full: "9999px" }
 }
 
-function fontStack(family) {
+// Families whose name says what they are; the rest fall back to sans-serif.
+const SERIF = /\bserif\b|garamond|playfair|merriweather|lora\b|baskerville|bodoni|didot|caslon|cormorant|crimson|spectral|prata|georgia|times/i
+const MONO = /\bmono\b|code\b|courier/i
+
+/** A CSS font-family stack for a family: itself, then the generic family of its kind. */
+export function fontStack(family) {
     const name = /[\s"']/.test(family) ? `"${family.replace(/"/g, "")}"` : family
-    return `${name}, sans-serif`
+    const generic = /\bsans\b/i.test(family) ? "sans-serif" : MONO.test(family) ? "monospace" : SERIF.test(family) ? "serif" : "sans-serif"
+    return `${name}, ${generic}`
 }
 
 export function buildTheme({ primary, primaryContent, secondary, secondaryContent, accent, neutral, background, text, radius = "0.5rem", font, fonts, colors = {}, usedColors = new Map() } = {}) {
@@ -134,6 +141,13 @@ export function buildTheme({ primary, primaryContent, secondary, secondaryConten
         eitri[name] = color
         eitri[`${name}-content`] = contentFor(color)
     }
+    // DaisyUI draws .input/.btn from --rounded-btn, .card/.modal from --rounded-box and .badge from --rounded-badge,
+    // and those rules beat a rounded-none utility: without them a square store keeps DaisyUI's rounded corners.
+    const scale = radiusScale(radius)
+    const square = scale.lg === scale.md && scale.md === radius
+    eitri["--rounded-btn"] = radius
+    eitri["--rounded-box"] = scale.lg
+    eitri["--rounded-badge"] = square ? radius : "1.9rem"
 
     for (const name of ["primary", "secondary", "accent", "neutral", "base"]) {
         const bg = name === "base" ? eitri["base-100"] : eitri[name]

@@ -37,6 +37,8 @@ const languagePart = (folder) => folder.split(/[-_]/)[0].toLowerCase()
  * Errors make the app show raw keys or the wrong language to someone; warnings are probably-untranslated strings.
  * locales: { "<folder>": translation object }, used: keys the code passes to t().
  */
+const PLURAL_SUFFIXES = ["zero", "one", "two", "few", "many", "other"]
+
 export function checkMiniApp({ name, locales, used }) {
     const errors = []
     const warnings = []
@@ -69,10 +71,12 @@ export function checkMiniApp({ name, locales, used }) {
         const missing = [...allKeys].filter((key) => !(key in flat[code]))
         if (missing.length) errors.push(`${name}: ${code} lacks ${missing.length} key(s) the other language has: ${list(missing)}`)
     }
-    const unknown = [...(used ?? [])].filter((key) => languages.length && languages.every((code) => !(key in flat[code])))
+    // i18next resolves t("a.b", { count }) to a.b_one / a.b_other / a.b_zero… (Intl plural categories).
+    const defines = (keys, key) => key in keys || PLURAL_SUFFIXES.some((suffix) => `${key}_${suffix}` in keys)
+    const unknown = [...(used ?? [])].filter((key) => languages.length && languages.every((code) => !defines(flat[code], key)))
     if (unknown.length) errors.push(`${name}: the code uses ${unknown.length} key(s) no translation defines: ${list(unknown)}`)
     for (const code of languages) {
-        const missingUsed = [...(used ?? [])].filter((key) => !unknown.includes(key) && !(key in flat[code]))
+        const missingUsed = [...(used ?? [])].filter((key) => !unknown.includes(key) && !defines(flat[code], key))
         if (missingUsed.length) errors.push(`${name}: ${code} lacks ${missingUsed.length} key(s) the code uses: ${list(missingUsed)}`)
     }
 

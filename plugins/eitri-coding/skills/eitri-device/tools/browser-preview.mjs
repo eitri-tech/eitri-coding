@@ -16,7 +16,8 @@
  *
  *   --config <file>     remote config: create-app's .eitri/remote-config.json ({ config }) or the
  *                       environment config itself (get_environment_config → config)
- *   --init "k=v&k2=v2"  initialization params (getInitializationInfos), e.g. "route=Categories"
+ *   --init "k=v&k2=v2"  initialization params (getInitializationInfos), e.g. "route=Categories";
+ *                       a value in JSON (URL-encoded) arrives as an object: route=ProductCatalog&params={"facets":[…]}
  *   --locale pt-BR      navigator.language / i18n (default: config storePreferences.locale, else pt-BR)
  *   --bp 375            viewport width; height 812 (default 375, like site-clone's phone capture)
  *   --dpr 1             device scale factor (default 1: same pixels as site-clone's screenshots)
@@ -26,6 +27,8 @@
  *   --compare <png>     reference screenshot (site-clone: scrape/<slug>/screenshots/375-fullpage.png):
  *                       writes compare/NN.png, the reference and the app side by side per screen
  *   --headed            show the browser and keep it open, interactive, until its window is closed
+ *   --probe <module>    a module whose default export runs in the page once it is settled (page.evaluate):
+ *                       its result is written to probe.json (create-app: scripts/lib/componentsProbe.mjs)
  *
  * Writes viewport.png, fullpage.png, tiles/NN.png (screen-high slices of the full page) and
  * report.json (native calls, unhandled methods, apps/links the page tried to open, page
@@ -35,7 +38,7 @@ import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const argv = process.argv.slice(2)
@@ -92,7 +95,11 @@ function readConfig(file) {
 function parseInit(text) {
   const out = {}
   for (const [key, value] of new URLSearchParams(text ?? '')) {
-    out[key] = /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value === 'true' ? true : value === 'false' ? false : value
+    let parsed = value
+    if (/^[[{]/.test(value)) {
+      try { parsed = JSON.parse(value) } catch {}
+    }
+    out[key] = parsed !== value ? parsed : /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value === 'true' ? true : value === 'false' ? false : value
   }
   return out
 }
@@ -289,6 +296,17 @@ async function main() {
     pageErrors,
     consoleErrors: consoleErrors.slice(0, 60),
     failedRequests: failedRequests.slice(0, 60),
+  }
+  const probe = opt('probe')
+  if (probe) {
+    try {
+      const fn = (await import(pathToFileURL(resolve(probe)).href)).default
+      writeFileSync(join(out, 'probe.json'), JSON.stringify(await page.evaluate(fn), null, 2))
+      report.probe = 'probe.json'
+    } catch (err) {
+      report.probe = `failed: ${err instanceof Error ? err.message : err}`
+      console.error(`probe ${probe} failed: ${report.probe}`)
+    }
   }
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2))
   console.log(`browser-preview → ${out}`)

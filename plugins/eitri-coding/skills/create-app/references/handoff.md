@@ -29,6 +29,26 @@ Created by the create-app flow on <YYYY-MM-DD> from <store URL> (<platform>, <ac
 
 Eitri Play → log in → <organization> → <application> → dev.
 
+## Screens
+
+| Screen | Store page | Status | Still different |
+|---|---|---|---|
+| listing | <pages.listing> | matches / partial | <what differs and why> |
+| pdp | <pages.product> | … | … |
+| home / login / cart | … | … | … |
+
+Compare images: `preview/<screen>/compare/*.png` (store | app).
+
+## Integrations (from `.eitri/store-features.json`)
+
+| Service | In the app |
+|---|---|
+| <name> | integrated (<config path>) / opt-in, not set / needs the native build / not integrated: <what it would take> |
+
+## Gaps — what the store has and the app does not
+
+- [ ] <area>: <item> — <detail>   (one line per `gaps` entry, plus any the rebuild found)
+
 ## Placeholders and next steps
 
 - [ ] CMS pages for the home (the sections show the captured content as defaults until then)

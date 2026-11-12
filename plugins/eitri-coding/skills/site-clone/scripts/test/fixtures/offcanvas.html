@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Off-canvas drawers</title>
+<style>
+  body { margin: 0; font-family: sans-serif }
+  section { height: 700px; border-bottom: 1px solid #ddd }
+  /* A size-guide drawer parked below the screen (FARM Rio, deco.cx): fixed, zero height, content overflowing. */
+  #guide { position: fixed; left: 0; right: 0; bottom: -100%; height: 0; z-index: 50 }
+  #guide .panel { height: 600px; background: rgb(255, 0, 0) }
+  /* A mini-cart waiting at opacity 0. */
+  #minicart { position: fixed; left: 0; right: 0; bottom: 0; height: 60vh; opacity: 0; background: rgb(0, 0, 255) }
+</style></head>
+<body>
+  <section><h1>Short Jeans Artesanal</h1></section>
+  <section><p>Descrição</p></section>
+  <section><p>Rodapé</p></section>
+  <div id="guide"><div class="panel"><h2>Medidas da peça</h2></div></div>
+  <div id="minicart"><p>Produto adicionado na mochila</p><a href="/cart">ver mochila</a></div>
+</body>
+</html>

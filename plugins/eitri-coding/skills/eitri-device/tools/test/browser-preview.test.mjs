@@ -121,3 +121,22 @@ test('--compare pairs each screen-high tile with the same tile of a reference sc
     assert.equal(rows.length, 4, `border rows at x=${x}: ${rows.join(',')}`)
   }
 })
+
+test('--init values in JSON reach the app as objects (a view opened with state, e.g. the catalog\'s params.facets)', { timeout: 150000 }, async () => {
+  const facets = { facets: [{ key: 'productClusterIds', value: '1415' }] }
+  const dir = await preview('--init', `route=ProductCatalog&title=Promo&params=${encodeURIComponent(JSON.stringify(facets))}`)
+  const report = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8'))
+  assert.deepEqual(report.init.params, facets)
+  assert.equal(report.init.title, 'Promo')
+  assert.equal(report.init.route, 'ProductCatalog')
+})
+
+test('--probe runs a module in the settled page and writes its answer to probe.json', { timeout: 150000 }, async () => {
+  const mod = join(mkdtempSync(join(tmpdir(), 'probe-')), 'probe.mjs')
+  writeFileSync(mod, 'export default function () { return { width: window.innerWidth, title: document.title } }')
+  const dir = await preview('--probe', mod)
+  const probe = JSON.parse(readFileSync(join(dir, 'probe.json'), 'utf8'))
+  assert.equal(typeof probe.width, 'number')
+  assert.match(probe.title, /^account=lojax;/, 'it ran after the app settled (the fixture writes its title once the host answered)')
+  assert.equal(JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')).probe, 'probe.json')
+})

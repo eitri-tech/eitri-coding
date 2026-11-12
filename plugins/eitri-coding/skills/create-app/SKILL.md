@@ -40,7 +40,7 @@ Check, and stop with the fix if one fails:
 node ${CLAUDE_SKILL_DIR}/scripts/detect-store.mjs <url> > /tmp/profile.json
 ```
 
-Read `platform`, `account` (VTEX/Wake) or `shopDomain` (Shopify), `storeName`, `locale`, `currency`, `iconCandidates`.
+Read `platform`, `account` (VTEX/Wake) or `shopDomain` (Shopify), `storeName`, `locale`, `currency`.
 `platform: null` → unsupported or undetectable: ask the user which platform it runs on; stop if it isn't one of the three.
 
 Then ask, **in one message**, only what isn't known:
@@ -59,7 +59,12 @@ Then ask, **in one message**, only what isn't known:
    printf '\n/scrape/\n/preview/\n.playwright-mcp/\n.eitri/secrets.json\n' >> .gitignore
    git add -A && git commit -qm "chore: <template name> template"
    ```
-   Move `/tmp/profile.json` to `.eitri/profile.json`. Create `.eitri/create-app.state.json` with the URL, profile and choices.
+   Move `/tmp/profile.json` to `.eitri/profile.json`. Create `.eitri/create-app.state.json` with the URL and the choices — `screens.mjs` reads `template.gitUrl` from it, so keep this shape:
+   ```json
+   { "url": "<url>", "template": { "id": "…", "name": "…", "gitUrl": "…" },
+     "organization": { "id": "… or null", "name": "…", "new": false }, "appName": "<app-name>", "labels": [], "created": {} }
+   ```
+   `created` gets each Phase 3 write's ids as it succeeds.
 
    **Translations (English and Portuguese).** Eitri Play opens each mini-app in the phone's language, and the templates ship Portuguese only (`src/locales/pt-BR`): on a phone set to English every label is a raw key (`emptyCart.txtEmptyCart`). In each mini-app, `git mv src/locales/pt-BR src/locales/pt` (a language-only folder serves pt-BR and pt-PT alike; a regional one only that exact language), write `src/locales/en/translation.json` with the same keys and every value translated (keep `{{placeholders}}`), and add the keys the code uses that no file defines. Then
    `node ${CLAUDE_SKILL_DIR}/scripts/i18n.mjs check --repo .` must exit 0 (its warnings list values left in Portuguese). Commit.
@@ -67,32 +72,50 @@ Then ask, **in one message**, only what isn't known:
    ```bash
    node ${CLAUDE_SKILL_DIR}/../site-clone/scripts/scrape.mjs <url> --out scrape --name home --bp 375,414 --primary 375
    ```
-   Re-run detection on the capture — rendered pages expose icons the raw HTML hides:
+   Re-run detection on the capture — rendered pages expose what scripts inject:
    `node ${CLAUDE_SKILL_DIR}/scripts/detect-store.mjs <url> --capture scrape/home > .eitri/profile.json`
 
-   The home is one screen of six. Capture the pages the other mini-apps copy, from `profile.pages` (a product link found on the home, and the platform's cart and login paths), with the same flags: `--name pdp` (`pages.product`; when it is `null`, pick any product link from `scrape/home/content/outline.json`), `--name login` (`pages.login`) and `--name cart` (`pages.cart`). Without a session a VTEX cart usually shows the checkout's identity step instead of the cart: keep that capture as a reference for the checkout look only and say so — the cart then follows the PDP's cards, buttons and prices.
+   The home is one screen of six, and every screen is compared with its store page, so the pages are found by the script, never picked by hand: `profile.pages.listing` is the home's most repeated link (its navigation) whose page lists products, `profile.pages.product` is that listing's product with the most variants in stock (a PDP with a size/color selector), plus the platform's `cart` and `login` paths. Plan the screens and capture each one with the component probe:
+   ```bash
+   node ${CLAUDE_SKILL_DIR}/scripts/screens.mjs plan --repo .     # → .eitri/screens.json
+   ```
+   Run every screen's `commands.capture` from `.eitri/screens.json`, one at a time (the home again too: the first capture had no `--probe`), then `screens.mjs plan` again — the listing's facets (what the app opens to show the same products) come from its capture. `pages.listing: null` means no home link lists products: say so and add one by hand to `.eitri/profile.json` before planning. Each capture's `probe.json` is what the app will be measured against: open it and check it found the components (`cards` on the listing, `pdp.title`/`price`/`buyButton` on the PDP); an empty part there means the page needs a `--click` (a closed drawer, a tab) before capturing. Without a session a VTEX cart usually shows the checkout's identity step instead of the cart: keep that capture as a reference for the checkout look only and say so.
+
+   **Analyze** what the store has beyond its look — the screenshots do not show it:
+   `node ${CLAUDE_SKILL_DIR}/scripts/analyze-store.mjs <url> --capture scrape/home --capture scrape/listing --capture scrape/pdp --capture scrape/login --capture scrape/cart --profile .eitri/profile.json > .eitri/store-features.json`
+   - `integrations`: every third-party service the pages loaded (reviews, video stories, chat, analytics, marketing…) with its `support`: `integrated` (the add-ons implement it; its values go to `remoteConfig`), `config` (the template supports it but the store decides: `optIn`), `native` (needs the native app build) or `none` (not in the app). A widget still loading when captured is flagged `placeholder`.
+   - `home`: on VTEX IO, the home's sections read from the page's block tree — banners with their links, shelves with their **real collections and sort**, tabs, countdown dates — and as the template's CMS sections (`home.cmsSections`), the starting point of the home defaults in Phase 4; `home.skipped` has no app section. Every page a banner or the countdown links to is fetched and its action becomes what that page lists: a VTEX landing page (`store.custom` with a `customQuery`) opens its collection, titled with the page's name; a page without products opens in the in-app browser. (A `path` action is the template's guess from the URL — a category — which finds nothing for a landing page.) A link it could not open is a warning. Without a block tree (deco.cx, FastStore, legacy CMS) the home's **banners** come from the capture's linked images instead — one `MultipleImageBanner` per section row, its mode (slider, single, side by side, scrolling list) and aspect ratio from the rendered boxes, the original files behind image proxies — and each link opens the base facets its listing's filter links share (a collection, plus e.g. a size). App-download banners are left out (a `gap`). Shelves and texts still come from the screenshots.
+   - `productCard`: the store's card features; with the catalog of the captured products, the badges (VTEX highlights, specification values) and their colors go to `remoteConfig["appConfigs.badges"]`.
+   - `gaps`: everything the app will not reproduce. Nothing the store shows is dropped silently: each gap goes to the confirmation and the handoff.
 4. **Brand** (`references/brand.md`): pick primary / secondary / background / text colors, radius, the text and heading fonts and the header logo URL from the capture, then
    `node ${CLAUDE_SKILL_DIR}/scripts/font-faces.mjs "<Text font>:<weights>" "<Heading font>:<weights>" --capture scrape/home > .eitri/font-faces.css` (the store's own self-hosted faces from the capture, with absolute URLs and a CORS check; families it doesn't host come from Google Fonts)
    `node ${CLAUDE_SKILL_DIR}/scripts/brand-theme.mjs --primary … --primary-content … [--secondary … --secondary-content …] [--background …] [--text …] [--radius …] --font-primary "<Text font>" --font-main "<Heading font>" --font-faces .eitri/font-faces.css --repo . [--color <name>=<color> …] > .eitri/theme.json`
    Fix every warning before going on: contrast (use the shade it names) and theme colors the repo's classes use that the theme lacks (`--color`, values from the capture).
+   **App icon** (the avatar in the Console and Eitri Play: a square PNG, 512 px target, 180 px minimum, never upscaled):
+   `node ${CLAUDE_SKILL_DIR}/scripts/app-icon.mjs <url> --capture scrape/home --logo <header logo URL> --background <the header color the logo sits on>`
+   It downloads every source the store exposes — web app manifest icons, apple-touch-icon, `<link rel=icon>` (SVG too), `/favicon.ico` (largest frame) and the logo — into `.eitri/icon/candidates/`, measures each from its bytes, ranks them (a square ≥ 512 px or SVG first, then squares ≥ 180 px, then the logo centered on `--background`) and renders the result to `.eitri/icon/icon.png`; `.eitri/icon/icon.json` holds every candidate with its real size and verdict, and `upload`, the `upload_application_icon` arguments. Look at `icon.png`. Exit 3: the logo won and needs `--background`. Exit 4: nothing reaches 180 px and no logo can be padded — no icon; say so at the gate and in the handoff, never upload a smaller one. A "barely visible" warning means the wrong background: use the header's.
 5. **Mini-app plan.**
    `node ${CLAUDE_SKILL_DIR}/scripts/wire-app.mjs plan --repo . --prefix <app-name> > .eitri/plan.json`
 6. **Remote config.**
-   `node ${CLAUDE_SKILL_DIR}/scripts/remote-config.mjs --repo . --profile .eitri/profile.json --plan .eitri/plan.json [--secrets .eitri/secrets.json] --set appConfigs.headerLogo=<logo url> > .eitri/remote-config.json`
+   `node ${CLAUDE_SKILL_DIR}/scripts/remote-config.mjs --repo . --profile .eitri/profile.json --plan .eitri/plan.json --features .eitri/store-features.json [--secrets .eitri/secrets.json] --set appConfigs.headerLogo=<logo url> > .eitri/remote-config.json`
+   `--features` sets what the add-ons read (`appConfigs.reviews`, `appConfigs.badges`) and turns each opt-in into a warning; one the user accepts at the gate is added with `--set` (e.g. `--set appConfigs.clarityId=<id>`).
    Each `needs` entry is a value to ask for; carry the `warnings` to the summary.
 7. **Preview** `create_application` without `confirm` when the organization already exists (`organizationId`, `name`, `eitriShop: { provider, storeName }`, `labels`). A same-name warning means a previous run may exist: check the state file and ask. (With a new organization there is nothing to collide with.) The mini-app and icon checks need the application, so they run in Phase 3, right before their writes.
 
-**Confirmation gate.** Show one summary: organization (new or existing), application name and labels, the mini-app slugs, the environments (`dev`, `prod`) and the config highlights (`providerInfo`, main app, tabs) with the warnings, the theme colors and font, the icon URL, and that `prod` gets the config with `allowProduction`. Ask for one yes. Nothing is written before it.
+**Confirmation gate.** Show one summary: organization (new or existing), application name and labels, the mini-app slugs, the environments (`dev`, `prod`) and the config highlights (`providerInfo`, main app, tabs) with the warnings, the theme colors and font, the icon (chosen source, its real size, how it is prepared, the local file `.eitri/icon/icon.png`, and the rejected candidates with why), the integrations from `.eitri/store-features.json` (integrated, opt-in — ask —, native build, not integrated) and its `gaps`, and that `prod` gets the config with `allowProduction`. Ask for one yes. Nothing is written before it.
 
 ## Phase 3 — Write (in this order; save state after each)
 
 1. `create_organization` `confirm: true` (if new) → `organizationId`. It also adds you to it as `ORG_ADMIN`: check `membership.verified` is true — without membership, creating mini-apps, aliases, config and pushes answer 403 even for platform admins.
 2. `create_application` `confirm: true` → `applicationId` and the `dev` / `prod` environment ids. **manager-api creates both environments — don't create them.**
-3. `upload_application_icon`: preview each `iconCandidates` URL in order until one passes, then `confirm: true`. The list goes from the best (square PNG/JPEG/WebP, ≥ 180 px: it is the Console / Eitri Play avatar) to the store's `.ico` favicon, which the MCP converts to PNG — small, but the store's own mark: use it rather than no icon, and note in the handoff that a larger icon would look sharper. Skip the icon only when no candidate passes.
+3. `upload_application_icon` with `.eitri/icon/icon.json` → `upload` (`imageUrl`, and `background` for a logo): preview — its size must match `icon.json` → `icon` — then `confirm: true`. The MCP refuses anything under 180 px; when app-icon found nothing, skip the icon and list it in the handoff.
 4. `create_eitri_apps` with `.eitri/plan.json` → `createEitriApps.apps`: preview first. Taken slugs → redo Phase 2 steps 5–6 with another prefix (e.g. `<app-name>-app`; the application keeps its name) and preview again. Then `confirm: true` and save the structured result to `.eitri/created.json`. A partial failure (`failed` in the result) creates no app group: record the created mini-apps in the state file, stop, and report — retrying only the rest would leave the app group incomplete. To start over, clean up first (see Cleanup).
 5. Wire the repo, then commit:
    `node ${CLAUDE_SKILL_DIR}/scripts/wire-app.mjs apply --repo . --plan .eitri/plan.json --created .eitri/created.json --application <applicationId> --organization <organizationId>`
    `git add -A && git commit -qm "chore: wire to <app-name>"`
+   Then install the add-ons — catalog badges, review ratings, the Countdown, VideoStories and TabbedProductShelf sections (all read from the config above), the captured home as `src/utils/defaultHome.js` (`home.cmsSections`) and the template's CMS views made safe while the store's CMS is empty:
+   `node ${CLAUDE_SKILL_DIR}/scripts/addons.mjs apply --repo . --features .eitri/store-features.json`
+   Every `todo` it prints is a step whose anchor the repo lacks: do it by hand before the first push. Then `i18n.mjs check`, and commit. Run it again whenever the add-ons or `.eitri/store-features.json` change (it refreshes `defaultHome.js` until you edit it by hand; then it keeps yours and says so); with `eitri app start` running, restart it afterwards: its watcher does not sync files added in new folders (`Could not resolve "./components/…"` until it resyncs).
 6. `set_slug_aliases` with `plan.slugAliases` on `dev`, then on `prod` with `allowProduction: true`.
 7. `update_environment_config` with `.eitri/remote-config.json` → `config` on `dev`, then `prod` (`allowProduction: true`). Review each preview's leak scan; never write a config the scan flags without the user's say.
 8. `create_theme` (`content` = `theme.json` → `v2`, name "Brand") then `publish_theme`.
@@ -106,34 +129,35 @@ Then ask, **in one message**, only what isn't known:
 
 **Checkpoint:** the app now opens in Eitri Play with the store's catalog, theme and icon. Tell the user (preview steps below) and keep going.
 
-## Phase 4 — Make it look like the store
+## Phase 4 — Make every screen look like the store
 
-Follow `site-clone` Phase 2–3 with its Eitri target (`references/targets/eitri.md`) and the platform's CMS adapter — VTEX: `eitri-vtex.md`; Wake/Shopify: see `references/remote-config.md` → CMS. Load `eitri-specialist`, `eitri-luminus`, `eitri-bifrost` and `eitri-shopping` first; the repo's own `AGENTS.md` / `CLAUDE.md` / `.aiconfig` win over them.
+Load `eitri-specialist`, `eitri-luminus`, `eitri-bifrost` and `eitri-shopping` first, and read `site-clone`'s Eitri target (`references/targets/eitri.md`) and the platform's CMS adapter — VTEX: `eitri-vtex.md`; Wake/Shopify: see `references/remote-config.md` → CMS. The repo's own `AGENTS.md` / `CLAUDE.md` / `.aiconfig` win over them.
 
-Scope for the first version — every screen, not only the home, each as close to 1:1 with its 375 px capture as Luminus allows:
+Work it yourself, in this session, by eye against the captures. **Every screen in `.eitri/screens.json` gets its own pass — home, listing, pdp, login, cart.** Restyling the shared primitives is where it starts, never where it ends: the template's card, PLP and PDP keep the template's look until their own files change — that is how earlier runs ended with a store-like home and template screens everywhere else.
 
-1. **The shared primitives first**, from the PDP and login captures: the shared lib's card (`GenericBox`), button (`CustomButton`) and input (`CustomInput`) — radius, height, border, shadow, label case and size. Every screen of every mini-app is built from them (the VTEX template uses them in 60+ files), so this is what makes the PDP, cart, account and checkout look like the store; leaving them as the template ships them is why those screens keep the template's look while the home matches. A screen that needs another shape passes a class (`CustomButton` → `className`, `labelClassName`) rather than forking the primitive. Bump the shared version and every dependent's pin.
-2. **Header and home**: logo, search, cart, account; the home sections; footer content as an account/menu entry.
-3. **Product card**, in the shared lib (presentational, texts passed in translated by each mini-app's wrapper), used by home, PDP shelves and the account's wishlist alike — the template keeps a separate wrapper per mini-app, all pointing at its own card.
-4. **PDP** against `scrape/pdp`: gallery, the name/price/buy block, delivery, specifications, description, related shelf. Render with `--app pdp --init "slug=<the captured product's slug>"`.
-5. **Account / sign-in** against `scrape/login` (`--app account --init route=SignIn`), and the **cart** and **checkout** through the primitives above. Start from the template's component for each piece, but its look gives way to the capture: change spacing, type, colors, radius and layout until the section matches, and replace a component that cannot. Captured copy and images become section **defaults** (the store's CMS is empty at first — see the CMS note in `references/remote-config.md`). The VTEX template's CMS views do not survive an empty CMS: `getCmsContent` answers `null`, `Home.jsx` and `Categories.jsx` destructure it (the home stays on its skeleton forever, Categories throws), and `LandingPage.jsx` — the "Ofertas" tab — renders nothing (and, opened from its tab, shows a back arrow: the tab sends `tabIndex`, not the `openInBottomBar` it checks). VTEX FastStore product URLs are `/<linkText>-<skuId>/p` (`/kit-netflix-81/p` is linkText `kit-netflix`, SKU 81), but the template's PDP looks a `slug` up as a linkText: a section default that opens a product uses its product id (`{ type: 'product', value: '74' }`), and the PDP's slug lookup should retry without the `-<digits>` suffix. Give each a local default with the same `{ id, name, data }` shape as CMS sections (e.g. `src/utils/defaultHome.js`), used when the page is missing or has no sections: the captured home; for Categories the store's live category tree (`CategoryListVtex`, `exclusionList` is a `;`-separated string); for landing pages the catalog by biggest discount (`ProductInfiniteScroll`, `sort: discount:desc`). Preview each with `--init "route=Categories"` / `"route=LandingPage"`.
+Keep `eitri app start` running in the background (it rebuilds the dev workspaces on save; after a batch of changes wait for that app's "✓ Forjado em …" line). Gitignore `preview/`.
 
-**Work in the render–compare loop** (site-clone `references/targets/eitri.md` → Verify). Keep `eitri app start` running in the background (it rebuilds the dev workspaces on save; after each change wait for that app's "✓ Forjado em …" line), and render after every section:
-```bash
-node ${CLAUDE_SKILL_DIR}/../eitri-device/tools/browser-preview.mjs --app home --config .eitri/remote-config.json \
-     --compare scrape/home/screenshots/375-fullpage.png --out preview
-```
-Read `preview/home/compare/NN.png` (store | app, one screen each) and fix what differs before moving to the next section; `report.json` → `pageErrors` must stay empty. No device is needed: this renders the real build with the real theme and catalog in Chromium. Use `--init "route=…"` for other views and `--app account` (etc.) for other mini-apps; a device, when attached, is the final check (`eitri-device`). Gitignore `preview/`.
+**Per screen, at most two rounds:**
+1. Render it with its `commands.render` from `.eitri/screens.json` (it writes `preview/<screen>/compare/NN.png`, store | app, and `probe.json`), then `node ${CLAUDE_SKILL_DIR}/scripts/fidelity.mjs check --repo . --screen <screen>` once: it compares the two probes (no render, instant) and lists the measured differences — `cards.card.name.fontWeight`, both values and the template files that draw it. It is a **spec sheet, not a gate**: its exit code does not block anything.
+2. Read the compare tiles with that list and fix **everything you see in one batch**: layout, block order, spacing, type, colors, radius, icons. Translate measured values straight into classes (`fontWeight` 300 → `font-light`, `fontSize` 12 → `text-xs`, ratio 0.67 → image height from its width, `columns` 2 `gapX` 4 → `grid-cols-2 gap-x-1`); a color used in more than one place becomes a theme color first.
+3. Render again and fix what is still clearly off. Then move on — what is left (Luminus cannot draw it, the app lists other products, a font it cannot load) goes to the handoff, it does not earn a third round.
 
-Render once with `--locale en-US` as well: no screen may show a raw key or a Portuguese interface text. Run `i18n.mjs check --repo .` again before pushing.
+**Order and what each screen needs:**
+1. **Primitives** — the shared lib's button (`CustomButton`), input (`CustomInput`) and box (`GenericBox`), from the PDP buy button and size options, the listing's filter bar and the login capture: height, radius (`pill` is `rounded-full`), border, background, label size, weight and case. A screen that needs another shape passes a class (`className`, `labelClassName`) rather than forking the primitive. Bump the shared version and every dependent's pin.
+2. **listing / product card** — the card and its grid live here. The card is the shared lib's (`ProductCardFullImage`, presentational, texts passed in translated by each mini-app's wrapper), used by the PLP, the home's shelves, the PDP's related shelf and the wishlist, so restyling it once fixes all of them. Match image ratio, name, price, list price, installments, discount badge and wishlist; keep what the add-ons wired in (`badges` via `BadgeRender`, the `rating` stars). Then the PLP: columns, gaps, title, filter/sort bar.
+3. **pdp** — gallery, name/price/buy block, size/color options, delivery, specifications, description, related shelf.
+4. **home** — header (logo, search, cart, account) and the sections. The defaults come from `.eitri/store-features.json` → `home.cmsSections`, already written to `src/utils/defaultHome.js` by the add-ons (which also made `Home.jsx`, `Categories.jsx` and `LandingPage.jsx` fall back to them while the store's CMS is empty). Style the sections and add the shelves and texts the analysis could not read — **do not research banner targets or collections by hand** (fetching landing pages, guessing collections): a link the analysis could not resolve keeps its action and goes to the handoff as a gap. A section default that opens a product uses its product id (`{ type: 'product', value: '74' }`): VTEX FastStore product URLs are `/<linkText>-<skuId>/p`, but the template's PDP looks a `slug` up as a linkText. Categories default to the live category tree (`CategoryListVtex`, `exclusionList` is a `;`-separated string), landing pages to the catalog by biggest discount (`ProductInfiniteScroll`, `sort: discount:desc`): preview them with `--init "route=Categories"` / `"route=LandingPage"`.
+5. **login / cart / checkout** — mostly through the primitives, plus the sign-in box against `scrape/login`; `report.json` → `pageErrors` must stay empty on every render.
 
-When the home and the other screens in scope match, for each changed mini-app: bump `version` in its `eitri-app.conf.js` (and the dependents' pin when the shared app changes), `eitri push-version -m "<what changed>" -y` (`--shared` for shared), then `publish_revision` to `dev`. Commit. Verify the publish with `list_revisions` (each revision's `environments`; `list_published_revisions` can lag several minutes behind a publish).
+Render once with `--locale en-US` as well: no screen may show a raw key or a Portuguese interface text. Run `i18n.mjs check --repo .` again.
+
+Then, for each changed mini-app: bump `version` in its `eitri-app.conf.js` (and the dependents' pin when the shared app changes), `eitri push-version -m "<what changed>" -y` (`--shared` for shared), then `publish_revision` to `dev`. Commit. Verify the publish with `list_revisions` (each revision's `environments`; `list_published_revisions` can lag several minutes behind a publish).
 
 ## Phase 5 — Preview and hand off
 
 **Preview:** open **Eitri Play** on a phone → log in with the Eitri account → pick the organization → the app → `dev`. (Guests without Console access can't open it yet.)
 
-Write `EITRI_APP.md` at the repo root from `references/handoff.md`, commit, and finish with a short summary: what was created (with ids), how to preview, what is placeholder (CMS content, Shopify credentials, reCAPTCHA, deep links), and next steps.
+Write `EITRI_APP.md` at the repo root from `references/handoff.md`, commit, and finish with a short summary: what was created (with ids), how to preview, **each screen's status** (matches, or what is still different and why — never say a screen looks like the store unless its compare tiles show it), what is placeholder (CMS content, Shopify credentials, reCAPTCHA, deep links), the integrations and every gap from `.eitri/store-features.json` (plus any the rebuild found), and next steps.
 
 ## Cleanup
 
