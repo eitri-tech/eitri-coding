@@ -17,8 +17,12 @@
 <div id="shell">
   <header><h1>App Shell</h1><a class="close-account" href="/logout">Fechar</a></header>
   <main>
-    <section id="hero"><h2>Destaques</h2></section>
-    <section id="shelf"><h2>Mais vendidos</h2></section>
+    <section id="hero"><h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Categorias em destaque</h2><h2>Destaques</h2></section>
+    <section id="shelf"><h2>Mais vendidos</h2>
+      <!-- Brand tiles: the image is clipped round by its wrapper (border-radius 50%), the banner is not. -->
+      <a href="/dove"><span style="display:inline-block;width:80px;height:80px;border-radius:50%;overflow:hidden"><img src="data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22/%3E" width="80" height="80" alt="dove"></span></a>
+      <a href="/ofertas"><img src="data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22100%22/%3E" width="300" height="100" alt="ofertas"></a>
+    </section>
   </main>
 </div>
 <!-- A transparent click-catcher behind a header tooltip: it covers the viewport but paints nothing. -->

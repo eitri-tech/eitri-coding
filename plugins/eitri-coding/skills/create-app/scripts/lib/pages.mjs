@@ -18,6 +18,9 @@ export const PRODUCT_PATH = {
 const NOT_LISTING =
     /^\/(?:$|account|conta|minha-conta|my-account|login|logout|checkout|cart|carrinho|sacola|wishlist|favoritos|institucional|atendimento|central-de-atendimento|ajuda|help|faq|fala-|politica|privacidade|privacy|termos|terms|trocas|sobre|about|blog|lojas|nossas-lojas|store-locator|maps|sitemap|api\/|_v\/|pages\/(?:contact|about)|policies\/)/i
 const FILE = /\.[a-z0-9]{2,5}$/i
+// Search pages mean only their query ("/busca?fq=H:22427", "/pesquisa?q=naldecon"), which a candidate drops:
+// fetched bare they list everything or nothing, and no pagetype names what they list.
+const SEARCH_PATH = /^\/(?:busca|buscapagina|pesquisa|search|s)$/i
 
 const hrefs = (html) => [...String(html ?? "").matchAll(/<a\b[^>]*\shref\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)].map((m) => (m[1] ?? m[2]).replace(/&amp;/g, "&"))
 
@@ -39,7 +42,7 @@ export function listingCandidates(platform, pageUrl, html, { max = 8 } = {}) {
         const url = sameOrigin(href, pageUrl)
         if (!url) return
         const path = url.pathname.replace(/\/+$/, "") || "/"
-        if (NOT_LISTING.test(path) || FILE.test(path) || product.test(url.pathname)) return
+        if (NOT_LISTING.test(path) || SEARCH_PATH.test(path) || FILE.test(path) || product.test(url.pathname)) return
         const entry = seen.get(path) ?? { path, count: 0, index }
         entry.count += 1
         seen.set(path, entry)
@@ -92,8 +95,17 @@ export function pickProduct(candidates) {
 /** VTEX catalog answer for one product (products/search/<linkText>/p). */
 export function vtexVariants(answer) {
     const items = Array.isArray(answer) && Array.isArray(answer[0]?.items) ? answer[0].items : []
-    const inStock = items.filter((item) => (item?.sellers ?? []).some((s) => s?.commertialOffer?.AvailableQuantity > 0)).length
-    return { variants: items.length, inStock }
+    const available = items.filter((item) => (item?.sellers ?? []).some((s) => s?.commertialOffer?.AvailableQuantity > 0))
+    // The first SKU in stock and its seller: what a cart with this product holds (vtexCartAddUrl).
+    const first = available.find((item) => item?.itemId)
+    const seller = first?.sellers?.find((s) => s?.commertialOffer?.AvailableQuantity > 0)
+    return { variants: items.length, inStock: available.length, ...(first ? { skuId: String(first.itemId), sellerId: String(seller?.sellerId ?? "1") } : {}) }
+}
+
+/** The store page that adds the SKU to a fresh cart and opens it (VTEX's legacy cart endpoint, on every VTEX store). */
+export function vtexCartAddUrl(host, { skuId, sellerId } = {}) {
+    if (!skuId) return null
+    return `${host}/checkout/cart/add?sku=${encodeURIComponent(skuId)}&qty=1&seller=${encodeURIComponent(sellerId || "1")}&sc=1&redirect=true`
 }
 
 /** Shopify product answer (/products/<handle>.js). */
@@ -105,6 +117,17 @@ export function shopifyVariants(answer) {
 export function vtexProductUrl(account, productUrl) {
     const linkText = new URL(productUrl).pathname.replace(/^\/|\/p\/?$/g, "")
     return `https://${account}.vtexcommercestable.com.br/api/catalog_system/pub/products/search/${linkText}/p`
+}
+
+/** Resolve the catalog identity; a numeric suffix is a SKU only when the catalog confirms the whole route. */
+export async function resolveVtexProduct(account, productUrl, get) {
+    const direct = await get(vtexProductUrl(account, productUrl), "VTEX product")
+    if (Array.isArray(direct) && direct.length) return direct
+    const route = decodeURIComponent(new URL(productUrl).pathname.replace(/^\/|\/p\/?$/g, ""))
+    const sku = /-(\d+)$/.exec(route)?.[1]
+    if (!sku) return []
+    const answer = await get(`https://${account}.vtexcommercestable.com.br/api/catalog_system/pub/products/search?fq=skuId:${sku}`, "VTEX SKU")
+    return Array.isArray(answer) ? answer.filter((p) => `${p.linkText}-${sku}` === route && p.items?.some((item) => String(item.itemId) === sku)) : []
 }
 
 export function vtexPagetypeUrl(account, pageUrl) {
@@ -141,7 +164,8 @@ export function catalogSlug(name) {
  */
 export function vtexListingTarget(answer) {
     if (!answer || typeof answer !== "object") return null
-    const title = answer.title || answer.name || ""
+    // The brand or category itself, not the page's SEO title ("Dove em Promoção - Drogarias Pacheco").
+    const title = answer.name || answer.title || ""
     const segments = String(answer.url ?? "")
         .split("?")[0]
         .split("/")
@@ -163,4 +187,21 @@ export function vtexListingTarget(answer) {
         default:
             return null
     }
+}
+
+/**
+ * VTEX's GraphQL search (vtex.search-graphql, what the template's catalog calls) on a store still on the catalog
+ * resolver ignores selectedFacets: a department searched by facet counts the whole catalog, by query/map only its
+ * own products. The probe ({ all, byFacet, byQueryMap }: recordsFiltered of each) → true / false; null when it
+ * could not count.
+ */
+export function vtexLegacySearch(probe) {
+    const { all, byFacet, byQueryMap } = probe ?? {}
+    if (![all, byFacet, byQueryMap].every((n) => Number.isFinite(n)) || all <= 0 || byQueryMap <= 0) return null
+    return byFacet === all && byQueryMap < all
+}
+
+/** The GraphQL query that counts one product search (the probe's three counts). */
+export function vtexSearchCountQuery(args = "") {
+    return `{ productSearch(${args}from: 1, to: 1) @context(provider: "vtex.search-graphql") { recordsFiltered } }`
 }

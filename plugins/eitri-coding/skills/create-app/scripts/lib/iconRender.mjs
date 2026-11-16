@@ -63,7 +63,8 @@ async function draw({ src, natural, vector, mode, background, target, min, share
     if (mode !== "logo") {
         const side = vector ? target : Math.min(natural.width, natural.height, target)
         const c = canvas(side, side)
-        c.getContext("2d").drawImage(img, 0, 0, side, side)
+        const sourceSide = Math.min(img.naturalWidth, img.naturalHeight)
+        c.getContext("2d").drawImage(img, (img.naturalWidth - sourceSide) / 2, (img.naturalHeight - sourceSide) / 2, sourceSide, sourceSide, 0, 0, side, side)
         return { dataUrl: c.toDataURL("image/png"), width: side, height: side }
     }
 

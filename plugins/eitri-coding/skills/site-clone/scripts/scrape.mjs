@@ -484,14 +484,25 @@ const collectOutline = () => {
       const own = [...c.childNodes].filter(n => n.nodeType === 3).map(n => n.nodeValue).join(' ').replace(/\s+/g, ' ').trim()
       const sec = c.closest('[data-sc-section]')
       const s = sec ? Number(sec.getAttribute('data-sc-section')) : null
-      if (/^h[1-6]$/.test(t)) out.push({ section: s, type: t, text: c.textContent.replace(/\s+/g, ' ').trim() })
+      if (/^h[1-6]$/.test(t)) {
+        // A screen-reader-only heading (the "visually-hidden" 1×1 box) is in the page for assistive tech, not on screen.
+        const r = c.getBoundingClientRect()
+        out.push({ section: s, type: t, text: c.textContent.replace(/\s+/g, ' ').trim(), ...(r.width <= 1 || r.height <= 1 ? { srOnly: true } : {}) })
+      }
       else if (t === 'img') {
         // The link an image sits in is where a banner leads, and its rendered box tells a slide (one per
         // screen) from tiles side by side: without them the capture loses every banner's destination and layout.
         const link = c.closest('a[href]')
         const r = c.getBoundingClientRect()
         const box = [r.left + window.scrollX, r.top + window.scrollY, r.width, r.height].map(Math.round)
-        out.push({ section: s, type: 'img', alt: c.alt || '', src: c.currentSrc || c.src, box, ...(link ? { href: link.href } : {}) })
+        // Clipped round by itself or a wrapper (a brand or category circle): the app draws it round too.
+        let round = false
+        for (let e = c, i = 0; e && i < 3 && !round; e = e.parentElement, i++) {
+          const radius = getComputedStyle(e).borderTopLeftRadius
+          const w = e.getBoundingClientRect().width
+          round = radius.endsWith('%') ? parseFloat(radius) >= 50 : w > 0 && parseFloat(radius) >= w / 2 - 1
+        }
+        out.push({ section: s, type: 'img', alt: c.alt || '', src: c.currentSrc || c.src, box, ...(link ? { href: link.href } : {}), ...(round ? { round: true } : {}) })
       }
       else if (t === 'a' && c.textContent.trim()) out.push({ section: s, type: 'link', text: c.textContent.replace(/\s+/g, ' ').trim().slice(0, 200), href: c.href })
       else if (t === 'button' && c.textContent.trim()) out.push({ section: s, type: 'button', text: c.textContent.replace(/\s+/g, ' ').trim().slice(0, 120) })
@@ -800,6 +811,39 @@ const FIND_POPUP = () => {
   return null
 }
 
+// In-page: a fixed layer holding a visible password field is a sign-in dialog — a store whose /login
+// opens as a modal over the home — so it is the page being captured, not a popup to close. It and the
+// tinted backdrop under it are marked stuck, which FIND_POPUP looks past. Returns the newly kept dialogs.
+const KEEP_SIGN_IN = () => {
+  const visible = el => {
+    const r = el.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
+  }
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '')
+  const kept = []
+  for (const input of document.querySelectorAll('input[type="password"]')) {
+    if (!visible(input)) continue
+    // Every fixed ancestor: the dialog can itself be fixed (a bottom sheet) inside the covering layer.
+    const layers = []
+    for (let el = input.parentElement; el && el !== document.body; el = el.parentElement) {
+      if (getComputedStyle(el).position === 'fixed') layers.push(el)
+    }
+    const outer = layers.at(-1)
+    if (!outer || outer.hasAttribute('data-sc-signin')) continue
+    for (const layer of layers) { layer.setAttribute('data-sc-signin', ''); layer.setAttribute('data-sc-stuck', '') }
+    kept.push(describe(outer))
+  }
+  if (document.querySelector('[data-sc-signin]')) {
+    for (const el of document.body.querySelectorAll('[class*="backdrop" i]')) {
+      // Fixed is enough: a backdrop still fading in (opacity 0) is the dialog's all the same.
+      if (getComputedStyle(el).position === 'fixed') el.setAttribute('data-sc-stuck', '')
+    }
+  }
+  return kept
+}
+
 /**
  * Closes popups and accepts consent banners, alternating until neither is left
  * (a popup can sit on top of the banner, or the other way round). Returns what
@@ -807,6 +851,11 @@ const FIND_POPUP = () => {
  */
 async function dismissOverlays (page) {
   const done = []
+  const keepSignIn = async () => {
+    try {
+      for (const dialog of await page.evaluate(KEEP_SIGN_IN)) done.push(`Kept the sign-in dialog ${dialog} open: a layer with a password field is the page, not a popup.`)
+    } catch {}
+  }
   let consentDone = false
   for (let round = 0; round < 5; round++) {
     let acted = false
@@ -814,11 +863,21 @@ async function dismissOverlays (page) {
       const consent = await acceptConsent(page)
       if (consent) { consentDone = acted = true; done.push(`Dismissed ${consent} before capturing.`); await page.waitForTimeout(400) }
     }
+    // Right before looking for popups: a sign-in modal can open while the consent banner is handled.
+    await keepSignIn()
     let found = null
     try { found = await page.evaluate(FIND_POPUP) } catch {}
     if (found && !found.control) {
       acted = true // marked stuck: the next round looks past it
-      done.push(`A fixed overlay (${found.overlay}) covers the page and has no close control the capture recognises: re-run with --click "<its close selector>".`)
+      // A backdrop shows before its dialog (Bootstrap fades it in first): when that dialog is a
+      // sign-in, the backdrop is part of the page being captured, not a stuck popup.
+      let signIn = false
+      if (/backdrop/i.test(found.overlay)) {
+        await page.waitForTimeout(800)
+        await keepSignIn()
+        try { signIn = await page.evaluate(() => !!document.querySelector('[data-sc-signin]')) } catch {}
+      }
+      if (!signIn) done.push(`A fixed overlay (${found.overlay}) covers the page and has no close control the capture recognises: re-run with --click "<its close selector>".`)
     } else if (found) {
       acted = true
       try { await clickAnyway(page.locator('[data-sc-close]').first()) } catch {}

@@ -29,6 +29,10 @@ Created by the create-app flow on <YYYY-MM-DD> from <store URL> (<platform>, <ac
 
 Eitri Play → log in → <organization> → <application> → dev.
 
+Snapshot <if one was made>: `<protocol>-dev://app-snapshot/snapshot-[<branch>]-<n>-<uuid>` (also in Console →
+Snapshots). It opens only in the application's native dev build, not in Eitri Play. Make a new one with
+`eitri app snapshot -v` from the repo root.
+
 ## Screens
 
 | Screen | Store page | Status | Still different |

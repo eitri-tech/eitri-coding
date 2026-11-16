@@ -400,8 +400,7 @@ function headlessListing(text, path) {
         const i = f.indexOf("=")
         return { key: f.slice(0, i), value: f.slice(i + 1) }
     })
-    const h1 = /<h1\b[^>]*>([^<]*)/i.exec(text)?.[1]?.trim()
-    const title = decodeEntities(h1 || /<title[^>]*>([^<]*)<\/title>/i.exec(text)?.[1]?.trim() || "")
+    const title = pageTitle(text)
     const collection = facets.find((f) => f.key === "productClusterIds")
     const rest = facets.filter((f) => f !== collection)
     const target = collection ? { type: "collection", value: collection.value, ...(rest.length ? { facets: rest } : {}) } : { type: "facets", facets: rest }
@@ -435,7 +434,39 @@ function headlessShelfCollection(text) {
     return id ? { type: "collection", value: id } : undefined
 }
 
-const pageTitle = (text) => decodeEntities(/<h1\b[^>]*>([^<]*)/i.exec(text)?.[1]?.trim() || /<title[^>]*>([^<]*)<\/title>/i.exec(text)?.[1]?.trim() || "")
+/**
+ * The text of the page's first visible <h1>: screen-reader-only ones (a logo's "visually-hidden" name in the
+ * header) and empty ones are skipped. "" when there is none.
+ */
+export function firstHeading(html) {
+    for (const m of String(html ?? "").matchAll(/<h1\b([^>]*)>([^<]*)/gi)) {
+        if (/\b(?:visually-hidden|sr-only|screen-reader(?:-text)?)\b/i.test(m[1])) continue
+        const text = m[2].trim()
+        if (text) return decodeEntities(text)
+    }
+    return ""
+}
+
+const pageTitle = (text) => firstHeading(text) || decodeEntities(/<title[^>]*>([^<]*)<\/title>/i.exec(text)?.[1]?.trim() || "")
+
+/**
+ * VTEX legacy CMS (Portal): a listing page's search-result script fetches its products from
+ * /buscapagina?fq=…&ft=…&O=…, the page's own query. A collection (fq=H:<id>) or a full-text search (ft=)
+ * is what the page lists; a category or brand query (fq=C:/800/, B:…) is a search route its path resolves.
+ */
+function legacySearch(text) {
+    const m = /\/buscapagina\?([^"'\s<>]+)/.exec(text)
+    if (!m) return undefined
+    const params = new URLSearchParams(m[1].replace(/&amp;/g, "&"))
+    const sort = VTEX_SORT[params.get("O")]
+    const title = pageTitle(text)
+    const extra = { ...(sort ? { sort } : {}), ...(title ? { title } : {}) }
+    const cluster = params.getAll("fq").map((f) => /^H:(\d+)$/i.exec(f)?.[1]).find(Boolean)
+    if (cluster) return { type: "collection", value: cluster, ...extra }
+    const term = params.get("ft")?.trim()
+    if (term) return { type: "search", value: term, ...extra }
+    return "path"
+}
 
 /**
  * What a store page lists, from its server-rendered route and queries:
@@ -445,12 +476,15 @@ const pageTitle = (text) => decodeEntities(/<h1\b[^>]*>([^<]*)/i.exec(text)?.[1]
  *   null          a page without products (content, coupons…)
  *   { type: "collection" | "facets", … }       a headless listing (deco, FastStore): the base facets
  *                                                  every one of its own filter links repeats
+ *   { type: "collection" | "search", … } | "path"  a VTEX legacy CMS page: its /buscapagina query
  *   undefined     neither (unknown: the caller keeps the path)
  */
 export function landingTarget(html, path) {
     const text = String(html ?? "").replace(/\\u002F/gi, "/")
     const route = /"route":\{"domain":"store","id":"([^"]+)"/.exec(text)?.[1]
     if (!route) {
+        const legacy = legacySearch(text)
+        if (legacy !== undefined) return legacy
         const listing = headlessListing(text, path)
         if (listing) return listing
         const facets = headlessFacetNames(text)
@@ -482,26 +516,65 @@ export function landingTarget(html, path) {
     return target
 }
 
+/** Parameters a link carries for analytics only (utm_*, VTEX's utmi_*, ad click ids): they say nothing about the page. */
+const TRACKING_PARAM = /^(?:utmi?_[a-z]+|gclid|fbclid)$/i
+
+/**
+ * What a link's own query lists, without fetching its page: a search (`?q=`, VTEX legacy `?ft=`) or a VTEX
+ * legacy collection (`fq=H:<id>`, with its `O=` sort). undefined when the query does not say.
+ */
+export function linkQueryTarget(href, storeHost) {
+    let url
+    try {
+        url = new URL(href, storeHost)
+    } catch {
+        return undefined
+    }
+    const term = (url.searchParams.get("q") ?? url.searchParams.get("ft"))?.trim()
+    if (term) return { type: "search", value: term }
+    const cluster = url.searchParams.getAll("fq").map((f) => /^H:(\d+)$/i.exec(f)?.[1]).find(Boolean)
+    if (!cluster) return undefined
+    const sort = VTEX_SORT[url.searchParams.get("O")]
+    return { type: "collection", value: cluster, ...(sort ? { sort } : {}) }
+}
+
+/** The link's path when its query only carries tracking parameters ("/dove?&utmi_p=_" → "/dove"), else null. */
+export function trackingFreePath(href, storeHost) {
+    let url
+    try {
+        url = new URL(href, storeHost)
+    } catch {
+        return null
+    }
+    for (const key of url.searchParams.keys()) if (!TRACKING_PARAM.test(key)) return null
+    return url.pathname
+}
+
 /**
  * The CMS sections with every `path` action (a captured store link) replaced by what the page
  * lists: a collection, or the page itself in the in-app browser when it has no products.
  * `pages` maps each path to its HTML (fetched by the caller); `known` maps a path to what it lists when its
- * page cannot say (VTEX's pagetype: pages.mjs vtexListingTarget). A `?q=` link is that search. Paths it lacks,
+ * page cannot say (VTEX's pagetype: pages.mjs vtexListingTarget). A link whose query says what it lists (`?q=`,
+ * VTEX legacy `?ft=` and `fq=H:<id>`: linkQueryTarget) needs no page. Paths it lacks,
  * or whose page it cannot read, are `unresolved`.
  */
 export function resolveLinkActions(sections, pages, storeHost, known = {}) {
     const unresolved = new Set()
     const resolve = (action) => {
         if (action?.type !== "path") return action
-        const query = new URL(action.value, storeHost).searchParams.get("q")
-        if (query) return { type: "search", value: query }
+        const own = linkQueryTarget(action.value, storeHost)
+        if (own?.type === "search") return own
+        // The banner's own label (what the shopper tapped) titles the listing.
+        if (own) return { ...own, ...(action.title ? { title: action.title } : {}) }
         if (!(action.value in pages)) {
             if (known[action.value]) return { ...known[action.value], ...(action.title ? { title: action.title } : {}) }
             unresolved.add(action.value)
             return action
         }
         const read = landingTarget(pages[action.value], action.value)
-        const target = read === undefined && known[action.value] ? known[action.value] : read
+        // A search route ("path") is resolved by the template as category segments: VTEX's pagetype names a
+        // brand or category exactly, so it wins when known.
+        const target = (read === undefined || read === "path") && known[action.value] ? known[action.value] : read
         // The banner's own label (what the shopper tapped) beats the page's heading as the listing's title.
         if (target && typeof target === "object") return { ...target, ...(action.title ? { title: action.title } : {}) }
         if (target === null) return { type: "link", value: new URL(action.value, storeHost).href }

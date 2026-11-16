@@ -59,7 +59,9 @@ function plan(args) {
 function apply(args) {
     const repo = option(args, "--repo")
     const { apps, slugAliases } = JSON.parse(readFileSync(option(args, "--plan"), "utf8"))
-    const { created = [] } = JSON.parse(readFileSync(option(args, "--created"), "utf8"))
+    const response = JSON.parse(readFileSync(option(args, "--created"), "utf8"))
+    if (response.failed || response.appGroupError || response.conflicts?.length) throw new Error("Partial or conflicting creation result: reconcile it before wiring. Nothing was changed.")
+    const created = [...(response.created ?? []), ...(response.reused ?? [])]
     const applicationId = option(args, "--application")
     const organizationId = option(args, "--organization")
     const versionMessage = option(args, "--message", false) ?? "create-app: first version"

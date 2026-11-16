@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+export const APP_ICON_CONTRACT = JSON.parse(readFileSync(new URL("./appIconContract.json", import.meta.url), "utf8"))
 // Finds the best source for an app's icon (its avatar in the Console and Eitri
 // Play) among everything a store exposes, measures each by decoding its bytes,
 // and ranks them. Pure: app-icon.mjs fetches. The MCP's upload_application_icon
@@ -5,13 +7,13 @@
 // upscaled, a non-square logo centered on a background color).
 
 /** What the MCP uploads: a 512 px square PNG when the source allows it. */
-export const TARGET_SIDE = 512
+export const TARGET_SIDE = APP_ICON_CONTRACT.targetSide
 /** Below this the avatar looks blurry: refused, never enlarged. */
-export const MIN_SIDE = 180
+export const MIN_SIDE = APP_ICON_CONTRACT.minimumSide
 /** Share of the square canvas a padded logo's longest side takes. */
-export const LOGO_SHARE = 0.8
+export const LOGO_SHARE = APP_ICON_CONTRACT.logoShare
 /** Sides within this ratio count as square. */
-const SQUARE_TOLERANCE = 0.02
+const SQUARE_TOLERANCE = APP_ICON_CONTRACT.squareTolerance
 
 /** Which kind wins between two equally good squares: the order stores intend them for app icons. */
 const KIND_PRIORITY = { manifest: 0, "apple-touch-icon": 1, icon: 2, favicon: 3 }

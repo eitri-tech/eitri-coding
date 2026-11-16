@@ -2,6 +2,7 @@
 // The screens the app must reproduce 1:1, and how to put each store page next to the app's render of it:
 //
 //   node screens.mjs plan --repo .        → .eitri/screens.json
+//   node screens.mjs order-form --repo .  → the id of a store cart holding the profile's product (VTEX), for the cart render
 //
 // For each screen — home, listing (PLP and product card), pdp, login, cart — the store page (profile.pages,
 // found by detect-store.mjs), its capture folder, the parts fidelity.mjs compares, the mini-app and init
@@ -11,13 +12,19 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { landingTarget } from "./lib/vtexBlocks.mjs"
+import { firstHeading, landingTarget } from "./lib/vtexBlocks.mjs"
 import { SCREEN_PARTS } from "./lib/fidelity.mjs"
+import { vtexCartAddUrl } from "./lib/pages.mjs"
+import { fetchPublic } from "./lib/http.mjs"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const PROBE = resolve(here, "lib", "componentsProbe.mjs")
+const SELF = resolve(here, "screens.mjs")
 const SCRAPE = resolve(here, "..", "..", "site-clone", "scripts", "scrape.mjs")
 const PREVIEW = resolve(here, "..", "..", "eitri-device", "tools", "browser-preview.mjs")
+
+// Commands are copied into a shell: URLs and installed plugin paths are data, not shell syntax.
+const shell = (value) => /^[a-zA-Z0-9_./:%=,+@-]+$/.test(String(value)) ? String(value) : "'" + String(value).replaceAll("'", "'\\''") + "'"
 
 const option = (args, name) => {
     const i = args.indexOf(name)
@@ -32,7 +39,7 @@ const readJson = (path, fallback) => (existsSync(path) ? JSON.parse(readFileSync
 export function listingState(html, path, known) {
     const read = landingTarget(html, path)
     const target = read === undefined && known ? known : read
-    const h1 = /<h1\b[^>]*>([^<]*)/i.exec(String(html ?? ""))?.[1]?.trim()
+    const h1 = firstHeading(html) || undefined
     if (target?.type === "search") return { facets: [], query: target.value, title: target.title ?? h1 ?? "" }
     if (target && typeof target === "object") {
         const facets = target.type === "collection" ? [{ key: "productClusterIds", value: target.value }, ...(target.facets ?? [])] : target.facets
@@ -61,8 +68,8 @@ function plan(repo) {
             app: { app, init: init ?? null },
             ...(note ? { note } : {}),
             commands: {
-                capture: `node ${SCRAPE} ${url} --out scrape --name ${name} --bp 375,414 --primary 375 --probe ${PROBE}`,
-                render: `node ${PREVIEW} --app ${app} --config .eitri/remote-config.json${initArg} --compare ${capture}/screenshots/375-fullpage.png --probe ${PROBE} --out preview --name ${name}`,
+                capture: `node ${shell(SCRAPE)} ${shell(url)} --out scrape --name ${name} --bp 375,414 --primary 375 --probe ${shell(PROBE)}`,
+                render: `node ${shell(PREVIEW)} --app ${app} --config .eitri/remote-config.json${initArg} --compare ${capture}/screenshots/375-fullpage.png --probe ${shell(PROBE)} --out preview --name ${name}`,
             },
         })
     }
@@ -78,27 +85,50 @@ function plan(repo) {
         } else add("listing", pages.listing, "home", null, "capture the listing, then plan again: its facets come from the capture")
     }
     if (pages.product) {
-        const slug = vtex ? new URL(pages.product).pathname.replace(/^\/|\/p\/?$/g, "") : null
-        add("pdp", pages.product, "pdp", slug ? `slug=${slug}` : null, slug ? undefined : "this template's PDP init params are not known: open the product by hand")
+        const slug = vtex ? pages.productSlug ?? new URL(pages.product).pathname.replace(/^\/|\/p\/?$/g, "") : null
+        const init = vtex && pages.productId ? `productId=${encodeURIComponent(pages.productId)}` : slug ? `slug=${encodeURIComponent(slug)}` : null
+        add("pdp", pages.product, "pdp", init, init ? undefined : "this template's PDP init params are not known: open the product by hand")
     }
     add("login", pages.login, "account", "route=SignIn")
-    add("cart", pages.cart, "cart")
+    // VTEX: the cart with the PDP's product in it — the store's (its add-to-cart URL) and the app's (an order form
+    // made on the store's checkout: `screens.mjs order-form`), not two empty carts.
+    const cartAdd = vtex ? vtexCartAddUrl(profile.host, pages) : null
+    if (cartAdd) add("cart", cartAdd, "cart", `orderFormId=$(node ${shell(SELF)} order-form --repo .)`)
+    else add("cart", pages.cart, "cart")
     return { template: state.template?.gitUrl ?? null, probe: PROBE, apps, screens }
 }
 
-function main(args) {
-    if (args[0] !== "plan") throw new Error("usage: screens.mjs plan --repo <dir>")
+/**
+ * A cart on the store's own checkout holding the profile's product (pages.skuId): an anonymous VTEX order form, as a
+ * shopper's browser makes one. Prints its id, for the app's cart render (--init "orderFormId=…").
+ */
+async function orderForm(repo) {
+    const profile = readJson(join(repo, ".eitri", "profile.json"), {})
+    const { host, pages = {} } = profile
+    if (profile.platform !== "VTEX" || !host || !pages.skuId) throw new Error("order-form: needs a VTEX profile with pages.skuId (detect-store.mjs records it)")
+    const json = async (path, body) => {
+        const res = await fetchPublic(`${host}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), timeoutMs: 20_000 })
+        if (!res.ok) throw new Error(`order-form: ${path} answered ${res.status}`)
+        return res.json()
+    }
+    const { orderFormId } = await json("/api/checkout/pub/orderForm", {})
+    if (!orderFormId) throw new Error("order-form: the store's checkout gave no orderFormId")
+    await json(`/api/checkout/pub/orderForm/${orderFormId}/items?sc=1`, { orderItems: [{ id: pages.skuId, quantity: 1, seller: pages.sellerId || "1" }] })
+    return orderFormId
+}
+
+async function main(args) {
     const repo = option(args, "--repo") ?? "."
+    if (args[0] === "order-form") return console.log(await orderForm(repo))
+    if (args[0] !== "plan") throw new Error("usage: screens.mjs plan --repo <dir> | screens.mjs order-form --repo <dir>")
     const out = plan(repo)
     writeFileSync(join(repo, ".eitri", "screens.json"), `${JSON.stringify(out, null, 2)}\n`)
     console.log(JSON.stringify(out, null, 2))
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    try {
-        main(process.argv.slice(2))
-    } catch (err) {
+    main(process.argv.slice(2)).catch((err) => {
         console.error(err instanceof Error ? err.message : err)
         process.exit(1)
-    }
+    })
 }

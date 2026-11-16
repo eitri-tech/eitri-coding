@@ -178,7 +178,7 @@ test("cmsSectionsFromVtex: sections from one block get distinct ids (they are Re
     )
 })
 
-import { headlessFacetNames, landingTarget, resolveLinkActions } from "../lib/vtexBlocks.mjs"
+import { headlessFacetNames, landingTarget, resolveLinkActions, linkQueryTarget, trackingFreePath } from "../lib/vtexBlocks.mjs"
 
 // Trimmed from oceane.com.br/promocao-progressiva (Nov 2026): a store.custom landing page whose product
 // listing is a customQuery (the first querySchema is the block's empty default, the second the site editor's).
@@ -202,6 +202,24 @@ test("landingTarget: a page without products is content (null), a search page ke
     assert.equal(landingTarget(CONTENT_PAGE), null)
     assert.equal(landingTarget(SEARCH_PAGE), "path")
     assert.equal(landingTarget("<html>not VTEX</html>"), undefined)
+})
+
+// Trimmed from drogariaspacheco.com.br (VTEX legacy CMS, Nov 2026): no runtime; the search-result script fetches the
+// page's products from /buscapagina with the page's own query.
+const LEGACY = (query, h1 = "Ofertas Imperdíveis") => `<html><head><title>Ofertas | Drogarias Pacheco</title></head><body><h1 class="visually-hidden">Drogarias Pacheco</h1><h1>${h1}</h1>
+<a href="/busca?fq=H:24873">banner</a>
+<script>$('.vitrine').QD_infinityScroll({ url: '/buscapagina?${query}&PS=48&sl=bb3695b9&cc=48&sm=0&PageNumber=' })</script></body></html>`
+
+test("landingTarget: a VTEX legacy CMS listing opens what its own search script asks for", () => {
+    assert.deepEqual(landingTarget(LEGACY("fq=H%3a24942&O=OrderByTopSaleDESC"), "/campanha/ofertas-imperdiveis"), {
+        type: "collection",
+        value: "24942",
+        sort: "orders:desc",
+        title: "Ofertas Imperdíveis",
+    })
+    assert.deepEqual(landingTarget(LEGACY("ft=dipirona", ""), "/busca"), { type: "search", value: "dipirona", title: "Ofertas | Drogarias Pacheco" })
+    // A category or brand page is a search route: the template resolves its path.
+    assert.equal(landingTarget(LEGACY("fq=C%3a%2f800%2f"), "/medicamentos"), "path")
 })
 
 // Trimmed from farmrio.com.br (deco.cx on VTEX, Nov 2026): no VTEX IO runtime; every filter link of the listing
@@ -245,6 +263,42 @@ test("resolveLinkActions: a headless store's banner paths become their listings'
     const unknown = resolveLinkActions([{ id: "b", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.jpg", action: { type: "path", value: "/produtos/barbour" } }] } }], { "/produtos/barbour": "<h1>vem aí</h1>" }, "https://www.farmrio.com.br")
     assert.deepEqual(unknown.sections[0].data.images[0].action, { type: "path", value: "/produtos/barbour" })
     assert.deepEqual(unknown.unresolved, ["/produtos/barbour"])
+})
+
+test("resolveLinkActions: a VTEX legacy search link names its collection or term in the URL: resolved without its page", () => {
+    const link = (value, title) => ({ imageUrl: "a.jpg", action: { type: "path", value, ...(title ? { title } : {}) } })
+    const sections = [{ id: "b", name: "MultipleImageBanner", data: { images: [
+        link("/busca?fq=H:24885&utmi_p=_&utmi_pc=Html&utmi_cp=dpa-trade_card3", "Episol"),
+        link("/busca/?fq=H%3a23499&O=OrderByBestDiscountDESC"),
+        link("/busca?ft=dipirona"),
+    ] } }]
+    const { sections: out, unresolved } = resolveLinkActions(sections, {}, "https://www.drogariaspacheco.com.br")
+    assert.deepEqual(out[0].data.images.map((i) => i.action), [
+        { type: "collection", value: "24885", title: "Episol" },
+        { type: "collection", value: "23499", sort: "discount:desc" },
+        { type: "search", value: "dipirona" },
+    ])
+    assert.deepEqual(unresolved, [])
+})
+
+test("resolveLinkActions: a search-route page (category, brand) opens what VTEX's pagetype says, not its path as categories", () => {
+    const brand = "/dove?&utmi_p=_&utmi_cp=marca"
+    const sections = [{ id: "b", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.jpg", action: { type: "path", value: brand } }] } }]
+    const pages = { [brand]: LEGACY("fq=B%3a1176") }
+    const known = { [brand]: { type: "facets", facets: [{ key: "brand", value: "dove" }], title: "Dove em Promoção" } }
+    const { sections: out, unresolved } = resolveLinkActions(sections, pages, "https://www.drogariaspacheco.com.br", known)
+    assert.deepEqual(out[0].data.images[0].action, known[brand])
+    assert.deepEqual(unresolved, [])
+})
+
+test("link helpers: what a URL's own query lists, and its path without tracking parameters", () => {
+    assert.deepEqual(linkQueryTarget("/busca?fq=H:1&utmi_p=_", "https://loja.com.br"), { type: "collection", value: "1" })
+    assert.equal(linkQueryTarget("/dove?&utmi_p=_&utmi_cp=x", "https://loja.com.br"), undefined)
+    // Tracking only: a plain path VTEX's pagetype can answer for; any other parameter keeps it out.
+    assert.equal(trackingFreePath("/dove?&utmi_p=_&utmi_pc=Html&utm_source=x", "https://loja.com.br"), "/dove")
+    assert.equal(trackingFreePath("/si%C3%A0ge?&utmi_p=_", "https://loja.com.br"), "/si%C3%A0ge")
+    assert.equal(trackingFreePath("/medicamentos", "https://loja.com.br"), "/medicamentos")
+    assert.equal(trackingFreePath("/marcas?map=b", "https://loja.com.br"), null)
 })
 
 test("resolveLinkActions: path actions become what the page lists; content pages open in the browser", () => {

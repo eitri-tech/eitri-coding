@@ -67,18 +67,27 @@ function fold(text) {
     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 }
 
-/**
- * The store name from the page title: the segment that contains the domain's
- * name ("… | Motorola Oficial" on motorola.com.br), else the first one
- * ("C&A | Moda feminina…" → "C&A").
- */
-function titleName(head, pageUrl) {
-    const raw = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1]
-    if (!raw) return undefined
-    const title = decodeEntities(raw).replace(/\s+/g, " ").trim()
-    const segments = title.split(/\s[|–—-]\s|:\s/).map((s) => s.trim()).filter(Boolean)
+/** True when the name spells the domain's name ("Drogarias Pacheco" on drogariaspacheco.com.br). */
+function namesDomain(name, pageUrl) {
     const domainName = fold(new URL(pageUrl).hostname.replace(/^www\./, "").split(".")[0])
-    return segments.find((s) => domainName.length > 2 && fold(s).replace(/[^a-z0-9]/g, "").includes(domainName)) ?? segments[0]
+    return domainName.length > 2 && fold(name).replace(/[^a-z0-9]/g, "").includes(domainName)
+}
+
+/**
+ * The store name: og:site_name / application-name, else the title segment that
+ * contains the domain's name ("… | Motorola Oficial" on motorola.com.br), else
+ * the author / copyright meta when it names the domain (a home titled
+ * "Farmácia Online: Frete Grátis…" on drogariaspacheco.com.br), else the
+ * title's first segment ("C&A | Moda feminina…" → "C&A").
+ */
+function storeName(metas, head, pageUrl) {
+    const site = metaContent(metas, "og:site_name") ?? metaContent(metas, "application-name")
+    if (site) return site
+    const raw = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1]
+    const title = raw ? decodeEntities(raw).replace(/\s+/g, " ").trim() : ""
+    const segments = title.split(/\s[|–—-]\s|:\s/).map((s) => s.trim()).filter(Boolean)
+    const owners = ["author", "copyright"].map((key) => metaContent(metas, key)).filter(Boolean)
+    return segments.find((s) => namesDomain(s, pageUrl)) ?? owners.find((s) => namesDomain(s, pageUrl)) ?? segments[0]
 }
 
 function detectVtex(text) {
@@ -161,6 +170,16 @@ function pagesToCapture(platform, pageUrl, anchors) {
     return { product, cart: `${origin}${rules.cart}`, login: `${origin}${rules.login}` }
 }
 
+/** "pt-br" → "pt-BR"; an invalid tag is kept as written. */
+function canonicalLocale(tag) {
+    if (!tag) return tag
+    try {
+        return Intl.getCanonicalLocales(tag)[0] ?? tag
+    } catch {
+        return tag
+    }
+}
+
 export function detectStore({ url, html }) {
     // JSON-escaped URLs (VTEX runtime) read like plain ones.
     const text = html.replace(/\\u002F/gi, "/").replace(/\\\//g, "/")
@@ -188,8 +207,8 @@ export function detectStore({ url, html }) {
         evidence: detected ? best.evidence : [],
         account: detected === "VTEX" || detected === "WAKE" ? best.account : undefined,
         shopDomain: detected === "SHOPIFY" ? best.shopDomain : undefined,
-        storeName: metaContent(metas, "og:site_name") ?? metaContent(metas, "application-name") ?? titleName(head, url),
-        locale: htmlLang ?? cultureLocale,
+        storeName: storeName(metas, head, url),
+        locale: canonicalLocale(htmlLang ?? cultureLocale),
         currency: detectCurrency(text, detected),
         themeColor: metaContent(metas, "theme-color"),
         pages: pagesToCapture(detected, url, tags(html, "a")),
@@ -250,5 +269,5 @@ export function withVtexProduct(profile, products) {
     const pick = listed.find(inStock) ?? listed[0]
     if (!pick) return profile
     const origin = new URL(profile.host ?? profile.url).origin
-    return { ...profile, pages: { ...profile.pages, product: `${origin}/${encodeURIComponent(pick.linkText)}/p` } }
+    return { ...profile, pages: { ...profile.pages, product: `${origin}/${encodeURIComponent(pick.linkText)}/p`, ...(pick.productId ? { productId: String(pick.productId) } : {}), productSlug: pick.linkText } }
 }

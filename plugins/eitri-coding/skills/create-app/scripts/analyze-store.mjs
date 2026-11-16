@@ -12,23 +12,26 @@
 //
 //   node analyze-store.mjs <url> --capture scrape/home [--capture scrape/pdp ...]
 //                          [--utc-offset -03:00 | --profile .eitri/profile.json] [--catalog <saved.json>] [--max-products 24]
-//                          [--link-pages <saved.json>] [--pagetypes <saved.json>]
+//                          [--link-pages <saved.json>] [--pagetypes <saved.json>] [--search-probe <saved.json>]
 //
 // The first capture is the home. Product data for the badges comes from the store's public
 // catalog API (products linked from the captures), or from --catalog. Every page a banner or countdown links
 // to is fetched (or read from --link-pages: { path: html }) to open what it lists: a VTEX landing page's
 // collection, not a category guessed from its path. A page whose HTML cannot say (a client-rendered listing)
 // opens what VTEX's pagetype API answers for its path (with --profile of a VTEX account; or --pagetypes:
-// { path: answer }); a `?q=` link opens that search.
+// { path: answer }); a `?q=` link opens that search. On VTEX it also checks that the store's GraphQL search
+// narrows by facet (or reads --search-probe: { department, all, byFacet, byQueryMap }): a legacy one does not,
+// and the app's legacy search add-on is switched on (appConfigs.legacySearchFacets).
+import { fetchPublic, MOBILE_UA } from "./lib/http.mjs"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { detectIntegrations } from "./lib/integrations.mjs"
-import { parseVtexBlocks, vtexPageSections, vtexProductSummary, cmsSectionsFromVtex, resolveLinkActions, linkPaths, landingTarget, headlessFacetNames } from "./lib/vtexBlocks.mjs"
+import { parseVtexBlocks, vtexPageSections, vtexProductSummary, cmsSectionsFromVtex, resolveLinkActions, linkPaths, linkQueryTarget, trackingFreePath, landingTarget, headlessFacetNames } from "./lib/vtexBlocks.mjs"
 import { buildBadgeConfig } from "./lib/badges.mjs"
-import { domHomeSections } from "./lib/domHome.mjs"
-import { catalogSlug, vtexFullTextUrl, vtexListingTarget, vtexPagetypeUrl } from "./lib/pages.mjs"
+import { domHomeSections, domWidgets, placeWidgets } from "./lib/domHome.mjs"
+import { catalogSlug, vtexFullTextUrl, vtexLegacySearch, vtexListingTarget, vtexPagetypeUrl, vtexSearchCountQuery } from "./lib/pages.mjs"
 
-const VALUED = ["--capture", "--utc-offset", "--profile", "--catalog", "--max-products", "--link-pages", "--pagetypes"]
+const VALUED = ["--capture", "--utc-offset", "--profile", "--catalog", "--max-products", "--link-pages", "--pagetypes", "--search-probe"]
 
 function options(args, name) {
     return args.flatMap((arg, i) => (arg === name && args[i + 1] ? [args[i + 1]] : []))
@@ -115,7 +118,7 @@ async function fetchCatalog(origin, linkTexts, groups) {
     await Promise.all(
         linkTexts.map(async (linkText) => {
             try {
-                const res = await fetch(`${origin}/api/catalog_system/pub/products/search/${encodeURIComponent(linkText)}/p`, { signal: AbortSignal.timeout(15_000) })
+                const res = await fetchPublic(`${origin}/api/catalog_system/pub/products/search/${encodeURIComponent(linkText)}/p`, { timeoutMs: 15_000 })
                 const [product] = res.ok ? await res.json() : []
                 if (product) out.push(catalogEntry(product, groups))
             } catch {}
@@ -130,11 +133,11 @@ async function fetchPagetypes(account, origin, paths) {
     await Promise.all(
         paths.slice(0, 40).map(async (path) => {
             try {
-                const res = await fetch(vtexPagetypeUrl(account, new URL(path, origin).href), { signal: AbortSignal.timeout(15_000) })
+                const res = await fetchPublic(vtexPagetypeUrl(account, new URL(path, origin).href), { timeoutMs: 15_000 })
                 if (!res.ok) return
                 const answer = await res.json()
                 if (answer?.pageType === "FullText" && answer.name) {
-                    const search = await fetch(vtexFullTextUrl(account, answer.name), { signal: AbortSignal.timeout(15_000) })
+                    const search = await fetchPublic(vtexFullTextUrl(account, answer.name), { timeoutMs: 15_000 })
                     answer.hits = search.ok ? ((await search.json())?.length ?? 0) : 0
                 }
                 out[path] = answer
@@ -144,13 +147,46 @@ async function fetchPagetypes(account, origin, paths) {
     return out
 }
 
+/**
+ * Counts a search three ways on the store's GraphQL search (what the template calls): everything, the first
+ * department by facet, the same by query/map. null when the category tree or a count is unavailable.
+ */
+async function probeVtexSearch(account, origin) {
+    try {
+        const tree = await fetchPublic(`https://${account}.vtexcommercestable.com.br/api/catalog_system/pub/category/tree/1`, { timeoutMs: 15_000 })
+        const departments = tree.ok ? await tree.json() : []
+        const url = Array.isArray(departments) ? departments.find((d) => d?.url)?.url : null
+        const department = url ? decodeURIComponent(new URL(url, origin).pathname.split("/").filter(Boolean)[0] ?? "").toLowerCase() : ""
+        if (!department) return null
+        const count = async (args) => {
+            const res = await fetchPublic(`${origin}/api/io/_v/private/graphql/v1`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ query: vtexSearchCountQuery(args) }),
+                timeoutMs: 20_000,
+            })
+            const total = res.ok ? (await res.json())?.data?.productSearch?.recordsFiltered : null
+            return Number.isFinite(total) ? total : null
+        }
+        const value = JSON.stringify(department)
+        return {
+            department,
+            all: await count(""),
+            byFacet: await count(`selectedFacets: [{ key: "category-1", value: ${value} }], `),
+            byQueryMap: await count(`query: ${value}, map: "c", `),
+        }
+    } catch {
+        return null
+    }
+}
+
 /** The HTML of each store path a section links to (failed ones are left out). */
 async function fetchPages(origin, paths) {
     const pages = {}
     await Promise.all(
         paths.slice(0, 40).map(async (path) => {
             try {
-                const res = await fetch(new URL(path, origin), { headers: { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" }, signal: AbortSignal.timeout(20_000) })
+                const res = await fetchPublic(new URL(path, origin), { headers: { "user-agent": MOBILE_UA }, timeoutMs: 20_000 })
                 if (res.ok) pages[path] = await res.text()
             } catch {}
         }),
@@ -200,16 +236,22 @@ async function main(args) {
         // No block tree (deco.cx, FastStore, legacy CMS): the home's banners from the DOM capture.
         const home = captures[0]
         converted = domHomeSections({ outline: home.outline, sections: home.sections, viewport: home.viewport, storeHost: origin })
+        // The store's widgets no linked image shows: its video carousel and its countdown, where it has them.
+        const widgets = domWidgets({ rendered: home.rendered, utcOffset: utcOffset ?? "-03:00", storeHost: origin })
+        converted = { ...converted, sections: placeWidgets(converted.sections, widgets) }
         warnings.push(
             `The captures carry no VTEX IO block tree (not a VTEX IO store, or the raw HTML is missing): the home's ${converted.sections.length} banner section(s) come from the capture's linked images; shelves, texts and card features come from the screenshots only.`,
         )
     }
     const skipped = converted.skipped
     const linkPagesFile = options(args, "--link-pages")[0]
-    const pages = linkPagesFile ? JSON.parse(read(linkPagesFile)) : await fetchPages(origin, linkPaths(converted.sections))
+    // A link whose own query says what it lists (?q=, VTEX legacy fq=H:<id>) needs no fetch.
+    const openPaths = linkPaths(converted.sections).filter((p) => !linkQueryTarget(p, origin))
+    const pages = linkPagesFile ? JSON.parse(read(linkPagesFile)) : await fetchPages(origin, openPaths)
     // What each linked page lists when its HTML cannot say (client-rendered listings): VTEX's pagetype.
     const pagetypesFile = options(args, "--pagetypes")[0]
-    const plainPaths = linkPaths(converted.sections).filter((p) => !p.includes("?"))
+    // Pagetype reads the path alone: a query of tracking parameters only (utm_*, utmi_*) does not change the page.
+    const plainPaths = openPaths.filter((p) => trackingFreePath(p, origin) !== null)
     const vtex = profile.platform === "VTEX" && profile.account
     const pagetypes = pagetypesFile ? JSON.parse(read(pagetypesFile)) : vtex ? await fetchPagetypes(profile.account, origin, plainPaths) : {}
     const known = Object.fromEntries(Object.entries(pagetypes).map(([path, answer]) => [path, vtexListingTarget(answer)]).filter(([, target]) => target))
@@ -245,6 +287,16 @@ async function main(args) {
     const remoteConfig = {}
     for (const i of integrations) if (i.support === "integrated" && i.remoteConfig) Object.assign(remoteConfig, i.remoteConfig)
     if (badges) remoteConfig["appConfigs.badges"] = badges.config
+    // Search: a legacy GraphQL search ignores the app's facets; the add-on sends them as query/map instead.
+    const probeFile = options(args, "--search-probe")[0]
+    const probe = probeFile ? JSON.parse(read(probeFile)) : vtex ? await probeVtexSearch(profile.account, origin) : null
+    const search = probe ? { ...probe, legacy: vtexLegacySearch(probe) } : null
+    if (search?.legacy) {
+        remoteConfig["appConfigs.legacySearchFacets"] = true
+        warnings.push(
+            `The store's GraphQL search ignores selectedFacets (legacy catalog resolver: "${search.department}" by facet counts ${search.all} products, the whole catalog; by query/map ${search.byQueryMap}). appConfigs.legacySearchFacets switches the app's catalog to query/map, and its filters to the legacy facet lists (category, brand, specifications; no price ranges).`,
+        )
+    } else if (vtex && !search) warnings.push("Could not check whether the store's GraphQL search narrows by facet: open a category in the app and check it lists that category.")
     const optIn = integrations.filter((i) => i.support === "config").map((i) => ({ id: i.id, ...(i.remoteConfig ? { remoteConfig: i.remoteConfig } : { config: i.config }), note: i.note }))
 
     // Gaps: everything the app will not reproduce
@@ -256,6 +308,7 @@ async function main(args) {
     for (const s of skipped) {
         if (s.products) gaps.push({ area: "home", item: s.kind, detail: `${s.id}: rebuild it as a ProductShelf by hand (the store's query is not in the page) — it shows ${s.products.join(", ")}` })
         else if (s.links) gaps.push({ area: "home", item: s.kind, detail: `${s.id}: ${s.links.join(", ")} (the app is already installed)` })
+        else if (s.texts) gaps.push({ area: "home", item: s.kind, detail: `${s.id}: "${s.texts.join(" · ")}" — no app section reads it: rebuild it by hand (an icon list, a note…) from the capture` })
         else gaps.push({ area: "home", item: s.kind === "unsupported" ? `store component ${s.components.join(", ")}` : s.kind, detail: `block ${s.id}${s.title ? ` ("${s.title}")` : ""}` })
     }
     const reviewsIntegrated = integrations.some((i) => i.category === "reviews" && i.support === "integrated")
@@ -274,6 +327,7 @@ async function main(args) {
         home: { sections, cmsSections, skipped },
         productCard: summary,
         remoteConfig,
+        search,
         optIn,
         gaps,
         warnings,

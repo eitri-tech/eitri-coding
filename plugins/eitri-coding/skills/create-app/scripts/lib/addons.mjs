@@ -56,6 +56,20 @@ function addImportLine(text, line) {
     return `${text.slice(0, at)}\n${line}${text.slice(at)}`
 }
 
+/** Appended to the home's ProductService by the legacy search step. */
+const LEGACY_SEARCH_FLAG = `
+/** appConfigs.legacySearchFacets: the store's GraphQL search ignores selectedFacets (create-app's legacy search add-on). */
+const legacySearchOn = async () => {
+	try {
+		const configs = await Eitri.environment.getRemoteConfigs()
+		return configs?.appConfigs?.legacySearchFacets === true
+	} catch (e) {
+		console.warn('legacySearchFacets: remote config unavailable', e)
+		return false
+	}
+}
+`
+
 export function applyAddons(repo, { features } = {}) {
     const report = { applied: [], skipped: [], todo: [] }
     const apps = miniApps(repo)
@@ -204,6 +218,57 @@ export function applyAddons(repo, { features } = {}) {
             return addNamedImports(next, shared, ["ProductBadges"])
         },
         "render <ProductBadges product={product} currentSku={currentSku} /> over the gallery",
+    )
+
+    // 4b. Legacy search: a store whose GraphQL search ignores selectedFacets (appConfigs.legacySearchFacets, from
+    // analyze-store.mjs) gets its facets as query/map, and its legacy facet lists as the filter's groups.
+    edit(
+        "home",
+        "src/services/ProductService.js",
+        "toLegacyOptions(",
+        "legacy search: facets as query/map behind appConfigs.legacySearchFacets",
+        (text) => {
+            const search = /\n(\t+)return await Vtex\.searchGraphql\.productSearch\(options\)/
+            const facets = /\n(\t+)const result = await Vtex\.searchGraphql\.facets\(options\)/
+            if (!search.test(text) || !facets.test(text)) return null
+            let next = text.replace(
+                search,
+                (_, indent) => `\n${indent}const legacy = (await legacySearchOn()) ? toLegacyOptions(options) : null\n${indent}return await Vtex.searchGraphql.productSearch(legacy ?? options)`,
+            )
+            next = next.replace(
+                facets,
+                (_, indent) =>
+                    `\n${indent}const legacy = (await legacySearchOn()) ? toLegacyOptions(options) : null\n${indent}const result = legacy\n${indent}\t? { facets: legacyFacetGroups(await Vtex.searchGraphql.facets(legacy, LEGACY_FACETS_RETURN)) }\n${indent}\t: await Vtex.searchGraphql.facets(options)`,
+            )
+            next = addImportLine(next, "import Eitri from 'eitri-bifrost'")
+            next = addImportLine(next, "import { toLegacyOptions, legacyFacetGroups, LEGACY_FACETS_RETURN } from './legacySearch'")
+            return `${next.replace(/\n*$/, "\n")}${LEGACY_SEARCH_FLAG}`
+        },
+        "send selectedFacets as query/map (services/legacySearch.js toLegacyOptions) and read facets through legacyFacetGroups when appConfigs.legacySearchFacets is true",
+    )
+
+    // 4c. Banner layouts the DOM home reading produces (lib/domHome.mjs): Mosaic, a new mode that keeps each tile's
+    // captured box, and GridList with columns and round tiles (a brand grid).
+    edit(
+        "home",
+        "src/components/CmsComponents/Banner/Banner.jsx",
+        "import Mosaic from",
+        "the Mosaic banner mode",
+        (text) => {
+            const anchor = /\n(\t)if \(mode === 'SingleBanner'\) \{/
+            if (!anchor.test(text)) return null
+            const next = text.replace(anchor, (_, indent) => `\n${indent}if (mode === 'Mosaic') {\n${indent}\treturn (\n${indent}\t\t<Mosaic\n${indent}\t\t\tdata={data}\n${indent}\t\t\tonClick={processActions}\n${indent}\t\t/>\n${indent}\t)\n${indent}}\n${indent}if (mode === 'SingleBanner') {`)
+            return addImportLine(next, "import Mosaic from './components/Mosaic'")
+        },
+        "render data.mode 'Mosaic' with components/Mosaic",
+    )
+    edit(
+        "home",
+        "src/components/CmsComponents/Banner/components/GridList.jsx",
+        "data?.rounded",
+        "GridList columns and round tiles",
+        (text) => (text.includes("className='grid grid-cols-2 px-4'") ? readFileSync(join(ADDONS, "snippets", "GridList.jsx"), "utf8") : null),
+        "support data.columns and data.rounded in GridList (addons/vtex/snippets/GridList.jsx)",
     )
 
     // 5. Home sections: schema, component map, translations.

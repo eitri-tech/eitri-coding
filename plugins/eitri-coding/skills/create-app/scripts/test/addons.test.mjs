@@ -78,6 +78,35 @@ const componentMap = {
     "shopping-vtex-template-home/public/sections.json": JSON.stringify([{ name: "MultipleImageBanner", requiredScopes: [], schema: { type: "object", properties: {} } }], null, "\t"),
     "shopping-vtex-template-home/src/locales/pt/translation.json": JSON.stringify({ home: { offers: "Ofertas" } }, null, "\t"),
     "shopping-vtex-template-home/src/locales/en/translation.json": JSON.stringify({ home: { offers: "Offers" } }, null, "\t"),
+    "shopping-vtex-template-home/src/services/ProductService.js": `import { Vtex } from 'eitri-shopping-vtex-shared'
+import { resolveSortParam } from './helpers/resolveSortParam'
+
+export const getProductsService = async (params, page) => {
+	const options = {
+		fullText: params?.query || params?.q || '',
+		selectedFacets: selectedFacets
+	}
+
+	return await Vtex.searchGraphql.productSearch(options)
+}
+
+export const getProductsFacetsService = async params => {
+	const options = {
+		fullText: params?.query || params?.q || '',
+		selectedFacets: selectedFacets,
+		hideUnavailableItems: true
+	}
+
+	const result = await Vtex.searchGraphql.facets(options)
+
+	if (!result || typeof result !== 'object') {
+		return { facets: [] }
+	}
+	return result
+}
+`,
+    "shopping-vtex-template-home/src/components/CmsComponents/Banner/Banner.jsx": "import { View } from 'eitri-luminus'\nimport SliderHero from './components/SliderHero'\nimport BannerList from './components/BannerList'\nimport FitOnScreen from './components/FitOnScreen'\nimport GridList from './components/GridList'\nimport RoundedBannerList from './components/RoundedBannerList'\nimport SingleBanner from './components/SingleBanner'\nimport { processActions } from '../../../services/ResolveCmsActions'\n\nexport default function Banner(props) {\n\tconst { data } = props\n\tconst mode = data.mode\n\n\tif (mode === 'SliderHero') {\n\t\treturn (\n\t\t\t<SliderHero\n\t\t\t\tdata={data}\n\t\t\t\tonClick={processActions}\n\t\t\t/>\n\t\t)\n\t}\n\tif (mode === 'BannerList') {\n\t\treturn (\n\t\t\t<BannerList\n\t\t\t\tdata={data}\n\t\t\t\tonClick={processActions}\n\t\t\t/>\n\t\t)\n\t}\n\tif (mode === 'RoundedBannerList') {\n\t\treturn (\n\t\t\t<RoundedBannerList\n\t\t\t\tdata={data}\n\t\t\t\tonClick={processActions}\n\t\t\t/>\n\t\t)\n\t}\n\tif (mode === 'GridList') {\n\t\treturn (\n\t\t\t<GridList\n\t\t\t\tdata={data}\n\t\t\t\tonClick={processActions}\n\t\t\t/>\n\t\t)\n\t}\n\tif (mode === 'SingleBanner') {\n\t\treturn (\n\t\t\t<SingleBanner\n\t\t\t\tdata={data}\n\t\t\t\tonClick={processActions}\n\t\t\t/>\n\t\t)\n\t}\n\tif (mode === 'FitOnScreen') {\n\t\treturn (\n\t\t\t<View>\n\t\t\t\t<FitOnScreen\n\t\t\t\t\tdata={data}\n\t\t\t\t\tonClick={processActions}\n\t\t\t\t/>\n\t\t\t</View>\n\t\t)\n\t}\n\treturn (\n\t\t<SliderHero\n\t\t\tdata={data}\n\t\t\tonClick={processActions}\n\t\t/>\n\t)\n}\n",
+    "shopping-vtex-template-home/src/components/CmsComponents/Banner/components/GridList.jsx": "import { Text, View } from 'eitri-luminus'\nimport SectionTitle from '../../../SectionTitle/SectionTitle'\nexport default function GridList(props) {\n\tconst { data, onClick } = props\n\tconst imagesList = data?.images\n\n\tconst gap = data.gap || 8\n\n\treturn (\n\t\t<View>\n\t\t\t<SectionTitle title={data.mainTitle} />\n\t\t\t<View\n\t\t\t\tstyle={{ gap: `${gap}px` }}\n\t\t\t\tclassName='grid grid-cols-2 px-4'>\n\t\t\t\t{imagesList?.map(image => (\n\t\t\t\t\t<View\n\t\t\t\t\t\tkey={image.imageUrl || image.externalImageUrl}\n\t\t\t\t\t\tonClick={() => onClick(image)}\n\t\t\t\t\t\tclassName='' // Adjust for two items per row with spacing\n\t\t\t\t\t>\n\t\t\t\t\t\t<Image\n\t\t\t\t\t\t\tsrc={image.imageUrl || image.externalImageUrl}\n\t\t\t\t\t\t\tclassName='w-full h-auto rounded'\n\t\t\t\t\t\t/>\n\t\t\t\t\t\t{image.subLabel && (\n\t\t\t\t\t\t\t<Text className='block text-sm font-bold text-center mt-1 text-gray-700'>\n\t\t\t\t\t\t\t\t{image.subLabel}\n\t\t\t\t\t\t\t</Text>\n\t\t\t\t\t\t)}\n\t\t\t\t\t</View>\n\t\t\t\t))}\n\t\t\t</View>\n\t\t</View>\n\t)\n}\n",
     "shopping-vtex-template-pdp/eitri-app.conf.js": `module.exports = { 'slug': 'loja-pdp', 'eitri-app-dependencies': { 'eitri-shopping-vtex-shared': {} } }`,
     "shopping-vtex-template-pdp/src/components/ProductCard/ProductCard.jsx": `import { ProductCardFullImage, TrackingService, getBadgesForProducts } from '${SHARED}'
 	const rating = null
@@ -181,6 +210,25 @@ test("applies every add-on to a fresh VTEX template and reports nothing left to 
         sections.map((s) => s.name),
         ["MultipleImageBanner", "Countdown", "VideoStories", "TabbedProductShelf"],
     )
+    // Legacy search: behind appConfigs.legacySearchFacets, facets go as query/map and come back as the filter's groups.
+    assert.ok(existsSync(join(dir, "shopping-vtex-template-home/src/services/legacySearch.js")))
+    const products = read(dir, "shopping-vtex-template-home/src/services/ProductService.js")
+    assert.match(products, /import \{ toLegacyOptions, legacyFacetGroups, LEGACY_FACETS_RETURN \} from '.\/legacySearch'/)
+    assert.match(products, /import Eitri from 'eitri-bifrost'/)
+    assert.match(products, /\n\tconst legacy = \(await legacySearchOn\(\)\) \? toLegacyOptions\(options\) : null\n\treturn await Vtex\.searchGraphql\.productSearch\(legacy \?\? options\)/)
+    assert.match(products, /legacyFacetGroups\(await Vtex\.searchGraphql\.facets\(legacy, LEGACY_FACETS_RETURN\)\)/)
+    assert.match(products, /configs\?\.appConfigs\?\.legacySearchFacets === true/)
+    assert.equal(products.match(/const legacySearchOn/g).length, 1)
+
+    // Banner layouts the DOM reading produces: Mosaic (a new mode) and GridList with columns and round tiles.
+    assert.ok(existsSync(join(dir, "shopping-vtex-template-home/src/components/CmsComponents/Banner/components/Mosaic.jsx")))
+    const banner = read(dir, "shopping-vtex-template-home/src/components/CmsComponents/Banner/Banner.jsx")
+    assert.match(banner, /import Mosaic from '.\/components\/Mosaic'/)
+    assert.match(banner, /if \(mode === 'Mosaic'\) \{\n\t\treturn \(\n\t\t\t<Mosaic/)
+    const grid = read(dir, "shopping-vtex-template-home/src/components/CmsComponents/Banner/components/GridList.jsx")
+    assert.match(grid, /data\?\.rounded/)
+    assert.match(grid, /const COLUMNS = /)
+
     const pt = JSON.parse(read(dir, "shopping-vtex-template-home/src/locales/pt/translation.json"))
     const en = JSON.parse(read(dir, "shopping-vtex-template-home/src/locales/en/translation.json"))
     assert.equal(pt.home.offers, "Ofertas", "existing keys kept")

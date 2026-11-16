@@ -38,6 +38,23 @@ test('a fixed full-screen app shell and a transparent click-catcher are not popu
   assert.match(rendered, /Mais vendidos/)
   const { warnings } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
   assert.ok(!warnings.some(w => /dismissed|overlay|popup/i.test(w)), `no dismissal reported: ${warnings.join(' | ')}`)
+  // A screen-reader-only heading (1×1, clipped) is in the outline, marked as such; a visible one is not.
+  const outline = JSON.parse(readFileSync(join(dir, 'content', 'outline.json'), 'utf8'))
+  assert.equal(outline.find(o => o.text === 'Categorias em destaque')?.srOnly, true)
+  assert.equal(outline.find(o => o.text === 'Destaques')?.srOnly, undefined)
+  // An image clipped round by itself or its wrapper is marked round; a rectangular banner is not.
+  assert.equal(outline.find(o => o.type === 'img' && o.alt === 'dove')?.round, true)
+  assert.equal(outline.find(o => o.type === 'img' && o.alt === 'ofertas')?.round, undefined)
+})
+
+test('a sign-in dialog (a /login rendered as a modal) is the page: kept open with its backdrop, not dismissed', { timeout: 150000 }, () => {
+  const dir = capture('signin-modal.html')
+  const rendered = readFileSync(join(dir, 'page.rendered.html'), 'utf8')
+  assert.match(rendered, /class="modal fade show"/, 'the sign-in modal is still open')
+  assert.match(rendered, /modal-backdrop/, 'its backdrop stays with it')
+  const { warnings } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
+  assert.ok(!warnings.some(w => /dismissed popup|no close control|did not close/i.test(w)), `nothing dismissed or reported stuck: ${warnings.join(' | ')}`)
+  assert.ok(warnings.some(w => /sign-in dialog/i.test(w) && /modal-login/.test(w)), 'the bundle says the dialog was kept')
 })
 
 /** Decodes an 8-bit RGB/RGBA PNG (what Chromium writes): { width, height, rgb(x, y) }. */

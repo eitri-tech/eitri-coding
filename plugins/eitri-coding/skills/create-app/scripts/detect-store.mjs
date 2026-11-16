@@ -20,14 +20,12 @@
 // CMS, headless storefronts) get them from the account's public tenant endpoint,
 // or its default sales channel when the tenant answers 404 (non-IO accounts).
 // A VTEX home without product links gets its product page from the catalog search.
+import { fetchPublic, MOBILE_UA } from "./lib/http.mjs"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { listingCandidates, productLinks, MIN_LISTING_PRODUCTS, hasListingControls, pickProduct, vtexListingTarget, vtexPagetypeUrl, vtexFullTextUrl, vtexVariants, shopifyVariants, vtexProductUrl } from "./lib/pages.mjs"
+import { resolveVtexProduct, listingCandidates, productLinks, MIN_LISTING_PRODUCTS, hasListingControls, pickProduct, vtexListingTarget, vtexPagetypeUrl, vtexFullTextUrl, vtexVariants, shopifyVariants } from "./lib/pages.mjs"
 import { loadChromium } from "./lib/iconRender.mjs"
 import { detectStore, vtexProductSearchUrl, vtexSalesChannelUrl, vtexTenantUrl, withVtexProduct, withVtexSalesChannel, withVtexTenant } from "./lib/detect.mjs"
-
-const MOBILE_UA =
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
 function option(args, name) {
     const i = args.indexOf(name)
@@ -56,13 +54,18 @@ async function main(args) {
     } else if (file) {
         html = readFileSync(file, "utf8")
     } else {
-        const res = await fetch(url, { headers: { "user-agent": MOBILE_UA, accept: "text/html" }, redirect: "follow" })
+        const res = await fetchPublic(url, { headers: { "user-agent": MOBILE_UA, accept: "text/html" } })
         if (!res.ok) throw new Error(`${url} answered ${res.status}`)
         url = res.url
         html = await res.text()
     }
     const responses = option(args, "--responses") ? JSON.parse(readFileSync(option(args, "--responses"), "utf8")) : null
-    const get = (target, what, saved, kind = "json") => getPublic(target, what, { saved, responses, kind })
+    const requests = new Map()
+    const get = (target, what, saved, kind = "json") => {
+        const key = JSON.stringify([target, saved, kind])
+        if (!requests.has(key)) requests.set(key, getPublic(target, what, { saved, responses, kind }))
+        return requests.get(key)
+    }
 
     let profile = detectStore({ url, html })
     if (profile.platform === "VTEX" && profile.account && (!profile.currency || !profile.locale)) {
@@ -75,6 +78,11 @@ async function main(args) {
     if (profile.pages) profile = await withListingAndProduct(profile, html, get, responses)
     if (profile.platform === "VTEX" && profile.account && profile.pages && !profile.pages.product) {
         profile = withVtexProduct(profile, await get(vtexProductSearchUrl(profile.account), "VTEX catalog search", option(args, "--products")))
+    }
+    if (profile.platform === "VTEX" && profile.account && profile.pages?.product && !profile.pages.productId) {
+        const [product] = await resolveVtexProduct(profile.account, profile.pages.product, get)
+        if (product?.productId) profile.pages.productId = String(product.productId)
+        if (product?.linkText) profile.pages.productSlug = product.linkText
     }
     console.log(JSON.stringify(profile, null, 2))
 }
@@ -123,11 +131,15 @@ async function withListingAndProduct(profile, homeHtml, get, responses) {
     }
     const candidates = []
     for (const productUrl of products) {
-        if (platform === "VTEX" && profile.account) candidates.push({ url: productUrl, ...vtexVariants(await get(vtexProductUrl(profile.account, productUrl), "VTEX product")) })
+        if (platform === "VTEX" && profile.account) {
+            const answer = await resolveVtexProduct(profile.account, productUrl, get)
+            candidates.push({ url: productUrl, ...vtexVariants(answer), productId: answer[0]?.productId, productSlug: answer[0]?.linkText })
+        }
         else if (platform === "SHOPIFY") candidates.push({ url: productUrl, ...shopifyVariants(await get(`${productUrl}.js`, "Shopify product")) })
         else candidates.push({ url: productUrl, variants: 1, inStock: 1 })
     }
-    const product = pickProduct(candidates)?.url ?? products[0] ?? profile.pages.product
+    const selected = pickProduct(candidates)
+    const product = selected?.url ?? products[0] ?? profile.pages.product
     // What the listing lists, for the app to open the same products (screens.mjs) when its page cannot say.
     let listingTarget = null
     if (platform === "VTEX" && profile.account) {
@@ -135,7 +147,7 @@ async function withListingAndProduct(profile, homeHtml, get, responses) {
         if (pagetype?.pageType === "FullText" && pagetype.name) pagetype.hits = (await get(vtexFullTextUrl(profile.account, pagetype.name), "VTEX full-text search"))?.length ?? 0
         listingTarget = vtexListingTarget(pagetype)
     }
-    return { ...profile, pages: { ...profile.pages, listing, product, ...(listingTarget ? { listingTarget } : {}) } }
+    return { ...profile, pages: { ...profile.pages, listing, product, ...(selected?.productId ? { productId: String(selected.productId) } : {}), ...(selected?.productSlug ? { productSlug: selected.productSlug } : {}), ...(selected?.skuId ? { skuId: selected.skuId, sellerId: selected.sellerId } : {}), ...(listingTarget ? { listingTarget } : {}) } }
 }
 
 /**
@@ -182,10 +194,9 @@ async function getPublic(target, what, { saved, responses, kind }) {
         return kind === "text" ? String(typeof body === "string" ? body : JSON.stringify(body)) : typeof body === "string" ? JSON.parse(body) : body
     }
     try {
-        const res = await fetch(target, {
+        const res = await fetchPublic(target, {
             headers: { "user-agent": MOBILE_UA, accept: kind === "text" ? "text/html" : "application/json" },
-            redirect: "follow",
-            signal: AbortSignal.timeout(15_000),
+            timeoutMs: 15_000,
         })
         if (res.ok) return kind === "text" ? await res.text() : await res.json()
         console.error(`${what} answered ${res.status} (${target}).`)

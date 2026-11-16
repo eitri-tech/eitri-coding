@@ -4,7 +4,7 @@ import { useTranslation } from 'eitri-i18n'
 import { processActions } from '../../../services/ResolveCmsActions'
 
 // A promotion countdown: optional banner image, a title and days / hours / minutes / seconds boxes.
-// data: { targetDate (ISO, with the store's UTC offset), title?, imageUrl?, action?, backgroundColor? }
+// data: { targetDate (ISO, with the store's UTC offset) | untilTime ("23:59:00", daily) + utcOffset, title?, imageUrl?, action?, backgroundColor? }
 // Hidden before it is configured and once the date has passed.
 
 function remaining(target, now) {
@@ -18,10 +18,27 @@ function remaining(target, now) {
 	}
 }
 
+/**
+ * The end of the countdown: `targetDate`, or with `untilTime` ("23:59:00") today's time of day in the store's
+ * `utcOffset` ("-03:00"), tomorrow's once it has passed (a daily "oferta do dia" that the store resets every day).
+ */
+export function targetOf(data, now) {
+	if (data?.untilTime) {
+		const [h = 0, m = 0, sec = 0] = String(data.untilTime).split(':').map(Number)
+		const offset = /^([+-])(\d{2}):(\d{2})$/.exec(data.utcOffset || '-03:00')
+		const offsetMs = offset ? (offset[1] === '-' ? -1 : 1) * (Number(offset[2]) * 60 + Number(offset[3])) * 60000 : 0
+		const local = new Date(now + offsetMs)
+		let target = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), h, m, sec) - offsetMs
+		if (target <= now) target += 86400000
+		return target
+	}
+	return data?.targetDate ? new Date(data.targetDate).getTime() : NaN
+}
+
 export default function Countdown(props) {
 	const data = props?.data ?? {}
 	const { t } = useTranslation()
-	const target = data.targetDate ? new Date(data.targetDate).getTime() : NaN
+	const target = targetOf(data, Date.now())
 	const [left, setLeft] = useState(() => remaining(target, Date.now()))
 
 	useEffect(() => {

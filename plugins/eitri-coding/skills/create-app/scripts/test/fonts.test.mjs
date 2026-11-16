@@ -108,6 +108,26 @@ test("fontFacesFromCapture resolves root- and protocol-relative URLs and matches
     assert.match(variable.css, /font-family:'Brand Sans'.*url\('https:\/\/static\.example\.com\/brand\.woff2'\)/)
 })
 
+test("fontFacesFromCapture keeps the Latin faces of a family split into unicode-range subsets (Google Fonts), not the first one", () => {
+    const face = (weight, range, file) => `@font-face { font-family: Roboto; font-style: normal; font-weight: ${weight}; src: url("https://fonts.gstatic.com/s/roboto/${file}.woff2") format("woff2"); unicode-range: ${range}; }`
+    const fonts = {
+        fontFaces: [
+            face(400, "U+460-52F, U+1C80-1C8A, U+20B4", "cyrext"),
+            face(400, "U+301, U+400-45F, U+490-491", "cyr"),
+            face(400, "U+100-2BA, U+2BD-2C5, U+2C7-2CC", "latinext"),
+            face(400, "U+0-FF, U+131, U+152-153, U+2BB-2BC, U+2C6, U+2DA, U+2DC, U+2??", "latin"),
+            face(700, "U+460-52F", "cyrext700"),
+            face(700, "U+0-FF, U+131", "latin700"),
+        ],
+    }
+    const { css } = fontFacesFromCapture(fonts, [parseFontSpec("Roboto:400,700")], { pageUrl: PAGE })
+    assert.deepEqual(css.split("\n").map((r) => /roboto\/(\w+)\.woff2/.exec(r)[1]), ["latin", "latin700"])
+    const ext = fontFacesFromCapture(fonts, [parseFontSpec("Roboto:400")], { pageUrl: PAGE, subsets: ["latin", "latin-ext"] })
+    assert.deepEqual(ext.css.split("\n").map((r) => /roboto\/(\w+)\.woff2/.exec(r)[1]), ["latinext", "latin"])
+    // A family whose faces for a weight cover no Latin text says so.
+    assert.throws(() => fontFacesFromCapture({ fontFaces: [face(400, "U+460-52F", "cyrext")] }, [parseFontSpec("Roboto:400")], { pageUrl: PAGE }), /Roboto 400.*Latin/)
+})
+
 test("fontFacesFromCapture names what it cannot serve instead of guessing", () => {
     assert.throws(() => fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("Lufga:300")], { pageUrl: PAGE }), /Lufga 300.*400, 700/)
     assert.throws(() => fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("Lost")], { pageUrl: PAGE }), /fonts\/lost\.woff2.*relative/)

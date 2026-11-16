@@ -175,3 +175,33 @@ test("apply reports the changed files relative to the repo, also when --repo is 
         "shopping-vtex-template-shared/eitri-app.conf.js",
     ])
 })
+
+test("apply accepts a recovered response with both newly created and reused mini-apps", () => {
+    const repo = templateRepo()
+    const planFile = join(repo, "plan.json")
+    writeFileSync(planFile, run("plan", "--repo", repo, "--prefix", "loja").out)
+    const createdFile = join(repo, "created.json")
+    writeFileSync(createdFile, JSON.stringify({
+        created: [{ id: "home", slug: "loja-home", publicKey: "pk-home" }],
+        reused: [{ id: "shared", slug: "loja-shared", publicKey: "pk-shared" }],
+        appGroupId: "group",
+    }))
+    const result = run("apply", "--repo", repo, "--plan", planFile, "--created", createdFile, "--application", "app", "--organization", "org")
+    assert.equal(result.code, 0, result.err)
+    assert.match(readFileSync(join(repo, "shopping-vtex-template-shared", "eitri-app.conf.js"), "utf8"), /'id': 'shared'/)
+})
+
+test("apply refuses complete mini-app identities when their app group still failed", () => {
+    const repo = templateRepo()
+    const planFile = join(repo, "plan.json")
+    writeFileSync(planFile, run("plan", "--repo", repo, "--prefix", "loja").out)
+    const createdFile = join(repo, "created.json")
+    writeFileSync(createdFile, JSON.stringify({ created: [
+        { id: "home", slug: "loja-home", publicKey: "pk-home" }, { id: "shared", slug: "loja-shared", publicKey: "pk-shared" },
+    ], appGroupError: "group failed" }))
+    const before = readFileSync(join(repo, "app-config.yaml"), "utf8")
+    const result = run("apply", "--repo", repo, "--plan", planFile, "--created", createdFile, "--application", "app", "--organization", "org")
+    assert.notEqual(result.code, 0)
+    assert.match(result.err, /reconcile/)
+    assert.equal(readFileSync(join(repo, "app-config.yaml"), "utf8"), before)
+})

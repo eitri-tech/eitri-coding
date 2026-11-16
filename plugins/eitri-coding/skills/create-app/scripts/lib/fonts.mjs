@@ -1,3 +1,4 @@
+import { requestSignal } from "./http.mjs"
 // Turns a store's Google Fonts into @font-face rules with absolute URLs for the
 // Luminus v1 global CSS. Absolute URLs matter: manager-api inlines the global CSS
 // into every mini-app's index.html, so a relative url() resolves against each
@@ -105,17 +106,33 @@ function absoluteFontUrl(url, { pageUrl, files }) {
     throw new Error(`${url}: relative to a stylesheet the capture does not name, so it has no absolute URL — host the file on a public https URL`)
 }
 
+/** True when a CSS unicode-range ("U+0-FF, U+131, U+2??") includes the code point; no range covers everything. */
+function rangeCovers(range, codePoint) {
+    if (!range) return true
+    return range.split(",").some((token) => {
+        const t = token.trim().replace(/^U\+/i, "")
+        const [lo, hi] = t.includes("-") ? t.split("-") : t.includes("?") ? [t.replaceAll("?", "0"), t.replaceAll("?", "F")] : [t, t]
+        return parseInt(lo, 16) <= codePoint && codePoint <= parseInt(hi, 16)
+    })
+}
+
+/** A code point each subset's face must cover: "A" for latin, "Ā" for latin-ext. */
+const SUBSET_PROBE = { latin: 0x41, "latin-ext": 0x100 }
+
 /**
  * The store's own @font-face rules for the requested families and weights (normal style), one per line, every
- * url() absolute. `missing` lists the requested families the capture does not declare at all (try Google Fonts).
+ * url() absolute. A family split into unicode-range subsets (Google Fonts) keeps, per weight, the faces that cover
+ * the requested subsets (latin by default), never the first one (cyrillic-ext). `missing` lists the requested
+ * families the capture does not declare at all (try Google Fonts).
  */
-export function fontFacesFromCapture(fonts, specs, { pageUrl }) {
+export function fontFacesFromCapture(fonts, specs, { pageUrl, subsets = ["latin"] }) {
+    const probes = subsets.map((name) => SUBSET_PROBE[name]).filter(Boolean)
     const files = fonts.files ?? []
     const faces = (fonts.fontFaces ?? [])
         .map((rule) => {
             const decls = declarations(rule)
             const get = (prop) => decls.find(([p]) => p === prop)?.[1]
-            return { decls, family: unquote(get("font-family") ?? ""), style: (get("font-style") ?? "normal").toLowerCase(), range: weightRange(get("font-weight")) }
+            return { decls, family: unquote(get("font-family") ?? ""), style: (get("font-style") ?? "normal").toLowerCase(), range: weightRange(get("font-weight")), unicode: get("unicode-range") }
         })
         .filter((f) => f.family && f.style === "normal")
     const rules = []
@@ -129,24 +146,29 @@ export function fontFacesFromCapture(fonts, specs, { pageUrl }) {
             continue
         }
         for (const weight of spec.weights) {
-            const face = own.find((f) => f.range[0] <= weight && weight <= f.range[1])
-            if (!face) {
+            const weighted = own.filter((f) => f.range[0] <= weight && weight <= f.range[1])
+            if (!weighted.length) {
                 const have = [...new Set(own.map((f) => (f.range[0] === f.range[1] ? `${f.range[0]}` : `${f.range[0]}–${f.range[1]}`)))]
                 throw new Error(`${spec.family} ${weight}: the capture has ${spec.family} at ${have.join(", ")}`)
             }
-            if (used.has(face)) continue
-            used.add(face)
-            const body = face.decls.map(([prop, value]) => {
-                if (prop === "font-family") return `font-family:'${face.family}'`
-                if (prop !== "src") return `${prop}:${value}`
-                const src = value.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_, q, url) => {
-                    const abs = absoluteFontUrl(url, { pageUrl, files })
-                    if (!abs.startsWith("data:")) urls.push(abs)
-                    return `url(${q}${abs}${q})`
+            // One face per requested subset (the first that covers it), in the capture's order.
+            const chosen = new Set(probes.map((cp) => weighted.find((f) => rangeCovers(f.unicode, cp))).filter(Boolean))
+            if (!chosen.size) throw new Error(`${spec.family} ${weight}: the capture's faces cover no Latin text (unicode-range ${weighted.map((f) => f.unicode).join(" | ")})`)
+            for (const face of weighted.filter((f) => chosen.has(f))) {
+                if (used.has(face)) continue
+                used.add(face)
+                const body = face.decls.map(([prop, value]) => {
+                    if (prop === "font-family") return `font-family:'${face.family}'`
+                    if (prop !== "src") return `${prop}:${value}`
+                    const src = value.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_, q, url) => {
+                        const abs = absoluteFontUrl(url, { pageUrl, files })
+                        if (!abs.startsWith("data:")) urls.push(abs)
+                        return `url(${q}${abs}${q})`
+                    })
+                    return `src:${src}`
                 })
-                return `src:${src}`
-            })
-            rules.push(`@font-face{${body.join(";")}}`)
+                rules.push(`@font-face{${body.join(";")}}`)
+            }
         }
     }
     return { css: rules.join("\n"), urls: [...new Set(urls)], missing }
@@ -160,7 +182,7 @@ export async function fontCorsProblems(urls, { fetchImpl = fetch, origin = "http
     const problems = []
     for (const url of urls) {
         try {
-            const res = await fetchImpl(url, { headers: { origin } })
+            const res = await fetchImpl(url, { headers: { origin }, signal: requestSignal() })
             await res.body?.cancel?.()
             if (!res.ok) problems.push(`${url}: answered ${res.status}`)
             else if (!res.headers.get("access-control-allow-origin")) problems.push(`${url}: no Access-Control-Allow-Origin header, so the app cannot load it`)

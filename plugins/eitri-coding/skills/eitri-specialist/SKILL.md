@@ -103,6 +103,23 @@ Use **only** these versions — no substitutions:
 - `eitri app start` — Start N Eitri-Apps when in a directory containing `app-config.yaml`
 - `eitri push-version` — Deploy a new version. Add `--shared` for shared-type apps. **Always increment the `version` in `eitri-app.conf.js` before running.** After pushing a shared app, update its pinned version in the `eitri-app.conf.js` of **every** app that consumes it, not only the one you were working on. When merging branches, check the shared version wasn't already taken and bump again if it was.
 - `eitri theme sync | create | publish` — Manage the Luminus theme (see *Theme* below).
+- `eitri app snapshot [-b <branch-name>] [-v]` — A testable build of the application's code, without a version or a publish (see *Snapshots* below).
+
+### Snapshots
+
+A snapshot lets someone test a change on their phone before it is pushed and published: no `version` bump, no environment touched. Docs: <https://docs.eitri.tech/en/quick-guides/snapshots/>.
+
+1. Commit the change (on its own branch when it is a feature: the snapshot is named after the branch, `snapshot-[<branch>]-<n>-<uuid>`; `-b` overrides the name).
+2. In `app-config.yaml`, keep only the Eitri-Apps the change touches (a whole new app keeps them all).
+3. Stop any `eitri app start`: the snapshot runs its own build of every listed mini-app in your remote workspaces, and two builds at once fail.
+4. From the repo root (where `app-config.yaml` is): `eitri app snapshot -v`. It builds each mini-app, then prints a **deeplink** and a **QR code**: `<protocol>-dev://app-snapshot/snapshot-[…]`.
+
+Who can open it:
+
+- The deeplink's scheme is the application's **snapshot deeplink protocol** (Console → the application's settings; `get_application` → `snapshotDeeplinkProtocol`) plus `-dev`. It opens only in the application's **native dev build** that registers that scheme — not in Eitri Play. A new application without its own native app has nothing to open it yet: say so instead of handing out a link nobody can use, and preview through Eitri Play → the `dev` environment.
+- On iOS, paste the deeplink into Notes or Reminders to make it tappable; on Android, use a deeplink tester app.
+- While a snapshot is open, a red dot on the bottom bar marks snapshot mode; tapping it returns to the normal app.
+- Console → the application → **Snapshots** lists every snapshot with its QR code and deeplink.
 
 ---
 

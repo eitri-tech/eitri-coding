@@ -16,12 +16,11 @@
 // `upload` (the upload_application_icon arguments) and `icon` (the local preview,
 // <out>/icon.png, what the MCP will upload). Exit 0 when `upload` is ready,
 // 3 when the logo needs --background, 4 when no source qualifies.
+import { fetchPublic, MOBILE_UA } from "./lib/http.mjs"
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
-import { candidateFileName, iconSources, manifestSources, measureImage, rankIcons } from "./lib/icon.mjs"
+import { TARGET_SIDE, MIN_SIDE, candidateFileName, iconSources, manifestSources, measureImage, rankIcons } from "./lib/icon.mjs"
 
-const MOBILE_UA =
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 const MAX_BYTES = 2 * 1024 * 1024
 const VALUED = ["--capture", "--html", "--logo", "--background", "--out"]
 
@@ -31,8 +30,8 @@ function option(args, name) {
 }
 
 async function get(url) {
-    const res = await fetch(url, { headers: { "user-agent": MOBILE_UA }, redirect: "follow", signal: AbortSignal.timeout(15_000) })
-    const bytes = new Uint8Array(await res.arrayBuffer())
+    const res = await fetchPublic(url, { headers: { "user-agent": MOBILE_UA }, maxBytes: MAX_BYTES })
+    const bytes = res.bytes
     return { status: res.status, finalUrl: res.url || url, contentType: (res.headers.get("content-type") ?? "").split(";")[0].trim(), bytes }
 }
 
@@ -55,13 +54,12 @@ async function fetchCandidate(source, dir, index) {
     try {
         const res = await get(source.url)
         if (res.status >= 400) return { ...source, status: res.status, error: `answered ${res.status}` }
-        if (res.bytes.length > MAX_BYTES) return { ...source, status: res.status, error: "larger than 2 MB" }
         const image = measureImage(res.bytes)
-        const name = candidateFileName(index, source.kind, res.finalUrl)
-        const file = join(dir, name)
-        writeFileSync(file, res.bytes)
         const redirected = res.finalUrl !== source.url ? { finalUrl: res.finalUrl } : {}
-        if (!image) return { ...source, ...redirected, status: res.status, contentType: res.contentType, file, error: `not an image (${res.contentType || "no type"} answer${/html/.test(res.contentType) ? ": a soft 404" : ""})` }
+        // Only images are kept for inspection: a soft 404 answers with the store's HTML page.
+        if (!image) return { ...source, ...redirected, status: res.status, contentType: res.contentType, error: `not an image (${res.contentType || "no type"} answer${/html/.test(res.contentType) ? ": a soft 404" : ""})` }
+        const file = join(dir, candidateFileName(index, source.kind, res.finalUrl))
+        writeFileSync(file, res.bytes)
         return { ...source, ...redirected, status: res.status, contentType: res.contentType, file, image }
     } catch (err) {
         return { ...source, error: `fetch failed: ${err instanceof Error ? err.message : err}` }
@@ -96,7 +94,7 @@ async function main(args) {
     }
     const candidates = await Promise.all(sources.map((s, i) => fetchCandidate(s, dir, i + 1)))
     const ranking = rankIcons(candidates, { background })
-    const report = { target: 512, minimum: 180, ...(manifestUrl ? { manifest: manifestUrl } : { manifest: null }), ...ranking, warnings }
+    const report = { target: TARGET_SIDE, minimum: MIN_SIDE, ...(manifestUrl ? { manifest: manifestUrl } : { manifest: null }), ...ranking, warnings }
 
     if (ranking.chosen && !args.includes("--no-render") && (ranking.upload || ranking.chosen.kind !== "logo")) {
         const { renderIcon } = await import("./lib/iconRender.mjs")

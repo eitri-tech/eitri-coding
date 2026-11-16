@@ -68,6 +68,7 @@ test("downloads every candidate, measures it from its bytes and picks the manife
     assert.deepEqual(byPath["/arquivos/favicon.png"].image, { format: "png", width: 60, height: 60 })
     assert.match(byPath["/arquivos/favicon.png"].reason, /declared 16x16, really 60×60.*under 180/)
     assert.match(byPath["/apple-touch-icon.png"].reason, /soft 404/)
+    assert.equal(byPath["/apple-touch-icon.png"].file, undefined, "a soft 404's HTML is not saved as a candidate")
     assert.match(byPath["/favicon.ico"].reason, /16×16/)
     assert.match(byPath["/icons/fake.png"].reason, /declared 512x512, really 256×256/)
     assert.equal(byPath["/arquivos/logo.png"].kind, "logo")

@@ -8,6 +8,8 @@
 //   - catalog badges on the product cards: VTEX highlights, specification values, collections (appConfigs.badges)
 //   - review ratings on cards and the PDP from the store's provider (appConfigs.reviews)
 //   - CMS sections: Countdown, VideoStories, TabbedProductShelf
+//   - legacy search: facets as query/map on a store whose GraphQL search ignores them (appConfigs.legacySearchFacets)
+//   - banner layouts read from a capture: Mosaic (tiles at their own boxes) and GridList columns / round tiles
 //   - the home defaults (src/utils/defaultHome.js, from --features → home.cmsSections) and the template's
 //     CMS views made safe while the store's CMS is empty
 // A `todo` is a step whose anchor the repo no longer has: do it by hand, as it says.

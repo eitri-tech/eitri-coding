@@ -8,6 +8,13 @@ import { fileURLToPath } from "node:url"
 
 const script = join(dirname(fileURLToPath(import.meta.url)), "..", "analyze-store.mjs")
 
+/** A saved search probe of a store whose facets narrow the list (Intelligent Search): keeps the tests offline. */
+function ioSearch() {
+    const file = join(mkdtempSync(join(tmpdir(), "probe-")), "search-probe.json")
+    writeFileSync(file, JSON.stringify({ department: "roupas", all: 5000, byFacet: 800, byQueryMap: 800 }))
+    return file
+}
+
 function entry(path, { component, blocks = [], content = {} }) {
     const body = { before: [], blockId: path, blocks: blocks.map((id) => ({ extensionPointId: id })), component, props: {}, content }
     return `"${path.replaceAll("/", "\\u002F")}":${JSON.stringify(body)}`
@@ -192,7 +199,7 @@ test("analyze-store on a headless VTEX store: banner links whose pages it cannot
     )
     const profile = join(dir, "profile.json")
     writeFileSync(profile, JSON.stringify({ platform: "VTEX", account: "loja", locale: "pt-BR" }))
-    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--link-pages", linkPages, "--pagetypes", pagetypes, "--profile", profile], { encoding: "utf8" }))
+    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--link-pages", linkPages, "--pagetypes", pagetypes, "--profile", profile, "--search-probe", ioSearch()], { encoding: "utf8" }))
     assert.deepEqual(
         out.home.cmsSections[0].data.images.map((i) => i.action),
         [{ type: "collection", value: "577", title: "Ellipse" }, { type: "search", value: "9060", title: "9060" }],
@@ -234,10 +241,30 @@ test("analyze-store on a Next.js VTEX store: a listing page's base facet names i
     )
     const profile = join(dir, "profile.json")
     writeFileSync(profile, JSON.stringify({ platform: "VTEX", account: "loja", locale: "pt-BR" }))
-    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--link-pages", linkPages, "--pagetypes", pagetypes, "--profile", profile], { encoding: "utf8" }))
+    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--link-pages", linkPages, "--pagetypes", pagetypes, "--profile", profile, "--search-probe", ioSearch()], { encoding: "utf8" }))
     assert.deepEqual(
         out.home.cmsSections[0].data.images.map((i) => i.action),
         [{ type: "collection", value: "177", title: "Família 574" }, { type: "collection", value: "636", title: "New Balance 983" }],
     )
     assert.doesNotMatch(out.warnings.join(" "), /Could not open or read/)
 })
+
+test("analyze-store on a VTEX store whose GraphQL search ignores facets: the legacy search add-on is switched on (--search-probe offline)", () => {
+    const { dir, catalog, linkPages } = capture()
+    const profile = join(dir, "profile.json")
+    writeFileSync(profile, JSON.stringify({ platform: "VTEX", account: "loja", host: "https://www.loja.com.br" }))
+    const pagetypes = join(dir, "pagetypes.json")
+    writeFileSync(pagetypes, "{}")
+    const probe = join(dir, "search-probe.json")
+    writeFileSync(probe, JSON.stringify({ department: "medicamentos", all: 94816, byFacet: 94816, byQueryMap: 11630 }))
+    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--profile", profile, "--search-probe", probe, "--link-pages", linkPages, "--pagetypes", pagetypes], { encoding: "utf8" }))
+    assert.equal(out.remoteConfig["appConfigs.legacySearchFacets"], true)
+    assert.deepEqual(out.search, { department: "medicamentos", all: 94816, byFacet: 94816, byQueryMap: 11630, legacy: true })
+    assert.ok(out.warnings.some((w) => /selectedFacets/.test(w) && /legacySearchFacets/.test(w)), out.warnings.join("\n"))
+    // A store whose facets narrow the list keeps the template's search.
+    writeFileSync(probe, JSON.stringify({ department: "maquiagem", all: 5000, byFacet: 800, byQueryMap: 800 }))
+    const io = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--profile", profile, "--search-probe", probe, "--link-pages", linkPages, "--pagetypes", pagetypes], { encoding: "utf8" }))
+    assert.equal(io.remoteConfig["appConfigs.legacySearchFacets"], undefined)
+    assert.equal(io.search.legacy, false)
+})
+

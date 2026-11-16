@@ -155,3 +155,31 @@ test("fidelity check: a \"*\" screen waives on every screen and \"*\" in a path 
     assert.deepEqual(screen.waived.map((w) => [w.path, w.reason]), [["pdp.title.fontFamily", why], ["pdp.price.fontFamily", why]])
     assert.equal(run.status, 1)
 })
+
+test("screens plan: a VTEX legacy CMS listing opens its /buscapagina collection and sort, titled by its visible heading", () => {
+    const dir = repo()
+    writeFileSync(
+        join(dir, "scrape", "listing", "page.raw.html"),
+        `<header><h1 class="visually-hidden">Drogarias Pacheco</h1></header><h1 class="h2">Ofertas Imperdíveis</h1><script>$('.vitrine').QD_infinityScroll({ url: '/buscapagina?fq=H%3a24942&O=OrderByTopSaleDESC&PS=48&PageNumber=' })</script>`,
+    )
+    execFileSync(process.execPath, [screens, "plan", "--repo", dir], { encoding: "utf8" })
+    const listing = JSON.parse(readFileSync(join(dir, ".eitri", "screens.json"), "utf8")).screens.find((s) => s.name === "listing")
+    const init = new URLSearchParams(listing.app.init)
+    assert.deepEqual(JSON.parse(init.get("params")), { facets: [{ key: "productClusterIds", value: "24942" }], sort: "orders:desc" })
+    assert.equal(init.get("title"), "Ofertas Imperdíveis")
+    assert.equal(listing.note, undefined)
+})
+
+test("screens plan: a VTEX store's cart is captured and rendered with its product in it, not empty", () => {
+    const dir = repo()
+    const profile = JSON.parse(readFileSync(join(dir, ".eitri", "profile.json"), "utf8"))
+    profile.pages.skuId = "768170"
+    profile.pages.sellerId = "1"
+    writeFileSync(join(dir, ".eitri", "profile.json"), JSON.stringify(profile))
+    execFileSync(process.execPath, [screens, "plan", "--repo", dir], { encoding: "utf8" })
+    const cart = JSON.parse(readFileSync(join(dir, ".eitri", "screens.json"), "utf8")).screens.find((s) => s.name === "cart")
+    assert.equal(cart.store.url, "https://www.loja.com.br/checkout/cart/add?sku=768170&qty=1&seller=1&sc=1&redirect=true")
+    // The app's cart opens the same product: an order form made on the store's checkout, its id as the init param.
+    assert.match(cart.commands.render, /--init "orderFormId=\$\(node .*screens\.mjs order-form --repo \.\)"/)
+})
+

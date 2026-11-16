@@ -70,6 +70,8 @@ export default function componentsProbe() {
         return c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c) ? c : null
     }
     const all = (root, sel) => [...root.querySelectorAll(sel)].filter(visible)
+    // A heading someone reads: a screen-reader-only one (the logo's name, "visually-hidden") is a 1×1 box.
+    const readable = (el) => rect(el).width > 1 && rect(el).height > 1
     const struck = (el) => {
         for (let e = el; e && e !== document.body; e = e.parentElement) if (/line-through/.test(getComputedStyle(e).textDecorationLine)) return true
         return false
@@ -241,16 +243,22 @@ export default function componentsProbe() {
 
     // PDP: a wide buy button outside the cards.
     // The button itself: the innermost such element (a bottom bar around the button has the same text).
-    const buyLike = clickable.filter((el) => !inCards(el) && BUY.test(text(el)) && text(el).length <= 40 && rect(el).width >= vw * 0.4)
+    // A buy button is a painted box; a text link that names the cart ("Ir direto para o carrinho") is not one.
+    const painted = (el) => {
+        const cs = getComputedStyle(el)
+        const fill = !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(cs.backgroundColor) || cs.backgroundImage !== "none"
+        return rect(el).height >= 28 && (fill || px(cs.borderTopWidth) > 0)
+    }
+    const buyLike = clickable.filter((el) => !inCards(el) && BUY.test(text(el)) && text(el).length <= 40 && rect(el).width >= vw * 0.4 && painted(el))
     const buy = buyLike.filter((el) => !buyLike.some((o) => o !== el && el.contains(o))).sort((a, b) => rect(a).top - rect(b).top)[0]
     let pdp = null
     if (buy) {
         const top = window.scrollY + rect(buy).top
-        const h1 = all(document.body, "h1").find((h) => !inCards(h))
+        const h1 = all(document.body, "h1").find((h) => !inCards(h) && readable(h))
         const titleEl =
             h1 ??
             all(document.body, "*")
-                .filter((e) => ownText(e).length >= 8 && !inCards(e) && !PRICE.test(ownText(e)) && box(e)[1] < top + 400)
+                .filter((e) => ownText(e).length >= 8 && readable(e) && !inCards(e) && !PRICE.test(ownText(e)) && box(e)[1] < top + 400)
                 .sort((a, b) => px(getComputedStyle(b).fontSize) - px(getComputedStyle(a).fontSize))[0]
         const near = prices.filter((p) => !inCards(p) && !clickable.some((c) => c.contains(p) && BUY.test(text(c)))).sort((a, b) => box(a)[1] - box(b)[1])
         const listPrice = near.find((p) => struck(mainText(p)))
@@ -304,7 +312,7 @@ export default function componentsProbe() {
     let listing = null
     if (cards && !pdp) {
         const firstCard = Math.min(...cardEls.map((c) => box(c)[1]))
-        const heading = all(document.body, "h1, h2").filter((h) => !inCards(h) && box(h)[1] < firstCard)[0]
+        const heading = all(document.body, "h1, h2").filter((h) => !inCards(h) && readable(h) && box(h)[1] < firstCard)[0]
         const tools = clickable.filter((el) => !inCards(el) && TOOLBAR.test(text(el)) && text(el).length <= 30 && box(el)[1] < firstCard)
         listing = {
             title: heading ? textStyle(mainText(heading)) : null,

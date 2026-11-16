@@ -6,6 +6,7 @@
 //   node font-faces.mjs Lufga:400,700 --capture scrape/home     (the store's own files; families it lacks go to Google)
 //   node font-faces.mjs Montserrat:400 --from saved-google.css     (offline, for tests)
 // With --capture, every font file is checked for CORS (the app loads it cross-origin); --no-check skips that.
+import { fetchPublic } from "./lib/http.mjs"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fontCorsProblems, fontFacesFromCapture, fontFacesFromGoogleCss, googleFontsCssUrl, parseFontSpec } from "./lib/fonts.mjs"
@@ -24,7 +25,7 @@ async function googleFaces(specs, { from, subsets }) {
     if (from) css = readFileSync(from, "utf8")
     else {
         const url = googleFontsCssUrl(specs)
-        const res = await fetch(url, { headers: { "user-agent": MODERN_UA } })
+        const res = await fetchPublic(url, { headers: { "user-agent": MODERN_UA } })
         if (!res.ok) throw new Error(`${url} answered ${res.status}: is every family on Google Fonts?`)
         css = await res.text()
     }
@@ -43,7 +44,7 @@ async function main(args) {
     if (capture) {
         const fonts = JSON.parse(readFileSync(join(capture, "design", "fonts.json"), "utf8"))
         const { url: pageUrl } = JSON.parse(readFileSync(join(capture, "manifest.json"), "utf8"))
-        const own = fontFacesFromCapture(fonts, specs, { pageUrl })
+        const own = fontFacesFromCapture(fonts, specs, { pageUrl, subsets })
         if (own.css) rules.push(own.css)
         google = own.missing
         if (!args.includes("--no-check")) {

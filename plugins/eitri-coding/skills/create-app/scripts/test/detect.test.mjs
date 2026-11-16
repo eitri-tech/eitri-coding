@@ -143,6 +143,21 @@ test("store name: the title segment that names the domain wins over the first on
     assert.equal(detectStore({ url: "https://www.motorola.com.br/", html }).storeName, "Motorola Oficial")
 })
 
+test("store name: an author meta that names the domain wins over a title that does not", () => {
+    const html = `<html lang="pt-BR"><head><title>Farmácia Online: Frete Grátis e Entrega em até 2h</title><meta name="author" content="Drogarias Pacheco" /><meta name="copyright" content="Drogarias Pacheco" /></head></html>`
+    assert.equal(detectStore({ url: "https://www.drogariaspacheco.com.br/", html }).storeName, "Drogarias Pacheco")
+})
+
+test("store name: an author meta that does not name the domain does not replace the title", () => {
+    const html = `<html><head><title>C&amp;A | Moda feminina</title><meta name="author" content="Agência X" /></head></html>`
+    assert.equal(detectStore({ url: "https://www.cea.com.br/", html }).storeName, "C&A")
+})
+
+test("locale: the page's tag in its canonical BCP 47 form (pt-br → pt-BR)", () => {
+    assert.equal(detectStore({ url: "https://www.loja.com.br/", html: `<html lang="pt-br"><head><title>Loja</title></head></html>` }).locale, "pt-BR")
+    assert.equal(detectStore({ url: "https://www.loja.com.br/", html: `<html lang="EN-us"><head><title>Loja</title></head></html>` }).locale, "en-US")
+})
+
 // /api/tenant/tenants?q=<account> answer, trimmed (chegueiembalagens, Nov 2026).
 const TENANT = {
     slug: "chegueiembalagens",

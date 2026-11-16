@@ -54,3 +54,13 @@ All three CMSs are hosted by Eitri, not by the store:
 Creating those pages is not automated yet, so a new app starts with an empty CMS. That is why Phase 4 puts the
 captured copy and images in the section components' **defaults**: the home looks like the store until real CMS
 pages exist. Tell the user who sets up the CMS at Eitri for a real launch.
+
+## Files and client-safe credentials
+
+`remote-config.mjs` adds both `.eitri/secrets.json` and `.eitri/remote-config.json` to the repo's gitignore.
+The resolved config contains the values copied from the credentials file. Commit the generated
+`.eitri/remote-config.example.json` instead; token/secret/password/API-key values are cleared.
+Ignore rules do not remove files already tracked by Git: untrack any resolved config before committing.
+
+Remote config reaches the client. Shopify inputs must be public client-safe Storefront credentials,
+not an Admin API token or client secret. Keep server-only credentials out of this flow.
