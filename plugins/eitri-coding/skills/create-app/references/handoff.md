@@ -43,6 +43,16 @@ Snapshots). It opens only in the application's native dev build, not in Eitri Pl
 
 Compare images: `preview/<screen>/compare/*.png` (store | app).
 
+## Bottom bar
+
+| | Store | App |
+|---|---|---|
+| Shape | <floating pill / glued to the bottom, labels or not> | <theme, labelVisibility, indicator> |
+| Tabs | <store labels, in order> | <app titles → mini-app/route> |
+| Icons | `.eitri/bottom-bar/icons/*.png` (the store's, as PNG) | <hosted URLs, or the Material stand-ins in use> |
+
+Compare: `.eitri/bottom-bar/store-bar.png`. Still different: <each `bar.json` warning and gap, one line each>.
+
 ## Integrations (from `.eitri/store-features.json`)
 
 | Service | In the app |
@@ -59,12 +69,14 @@ Compare images: `preview/<screen>/compare/*.png` (store | app).
 - [ ] <Shopify: Storefront token / Customer Account client id / callback URL> <if still empty>
 - [ ] reCAPTCHA site key for checkout (`appConfigs.checkout.recaptchaKey`) <VTEX>
 - [ ] Deep links: license the deeplink-resolver add-on
+- [ ] Bottom bar icons <if Material stand-ins are in use>: host `.eitri/bottom-bar/icons/*.png` (e.g. `https://media-eitri-content.eitri.tech/<app-name>/`), then `bottom-bar.mjs apply --icon …` + `sync`, and write the config to dev/prod
 - [ ] Publish to prod when the store approves: `publish_revision` with `allowProduction`
 - [ ] Native app build (out of scope here)
 
 ## Local development
 
 `eitri app start` from the repo root runs every mini-app with the bottom-bar simulation
-(`app-config.yaml`, `dynamic-bottom-tab-view-spec.json`). Push a mini-app with
+(`app-config.yaml`, `dynamic-bottom-tab-view-spec.json`), which replaces the environment's bar in that session
+and in snapshots: after changing `eitriConfig.dynamicBottomBar`, run `bottom-bar.mjs sync` (create-app skill). Push a mini-app with
 `eitri push-version -m "<message>" -y` (`--shared` for shared ones) after bumping its `version`.
 ```
