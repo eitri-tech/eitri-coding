@@ -2,7 +2,7 @@
   "name": "create-app-scripts",
   "private": true,
   "type": "module",
-  "description": "Deterministic helpers of the create-app skill: store detection, repo wiring, remote config and brand theme. No dependencies.",
+  "description": "Deterministic helpers of the create-app skill (detection, analysis, wiring, config, theme, icon, screen checks). No dependencies of its own: rendering uses site-clone's Playwright.",
   "scripts": {
     "test": "node --test"
   }

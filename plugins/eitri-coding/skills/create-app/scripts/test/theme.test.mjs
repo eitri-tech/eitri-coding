@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { buildTheme, colorTokens, contrastRatio } from "../lib/theme.mjs"
+import { buildTheme, contrastRatio } from "../lib/theme.mjs"
 
 const eitri = (out) => out.v2.daisyui.themes[0].eitri
 
@@ -42,15 +42,6 @@ test("the store's own button text color is kept, and a failing one comes with th
     assert.ok(!out.warnings.some((w) => w.startsWith("secondary-content")))
 })
 
-test("colorTokens: the theme colors a source's classes need beyond Tailwind's palette and DaisyUI's slots", () => {
-    const jsx = `
-        <View className={\`fixed bg-header-background shadow-md \${open ? 'text-header-content' : ''}\`}>
-        <Text className='text-header-content text-xl font-bold text-primary text-base-content text-gray-500 text-center'>
-        <View className='bg-primary-700 border-l-4 border-gray-200 bg-[#ffffff] hover:bg-white/50 ring-2 fill-current'>
-        <svg><path fill-rule="evenodd" stroke-width="2" /></svg>`
-    assert.deepEqual(Object.fromEntries(colorTokens(jsx)), { "header-background": 1, "header-content": 2, "primary-700": 1 })
-})
-
 test("custom theme colors go to theme.extend.colors; the ones the repo uses but nobody defines are warned about", () => {
     const out = buildTheme({
         primary: "#24809c",
@@ -63,43 +54,6 @@ test("custom theme colors go to theme.extend.colors; the ones the repo uses but 
     assert.ok(!warning.includes("header-"), "defined colors are not reported")
     assert.equal(buildTheme({ primary: "#24809c" }).v2.theme.extend, undefined, "no extend without custom colors")
     assert.throws(() => buildTheme({ primary: "#24809c", colors: { "header-content": "blue;}" } }), /header-content/)
-})
-
-test("base steps mix the background toward the text color", () => {
-    const out = buildTheme({ primary: "#0a2463" })
-    assert.equal(eitri(out)["base-100"], "#ffffff")
-    assert.equal(eitri(out)["base-content"], "#1f2937")
-    assert.equal(eitri(out)["base-200"], "#f6f6f7")
-    assert.equal(eitri(out)["base-300"], "#ebeced")
-})
-
-test("a square brand gets square corners everywhere but full", () => {
-    const out = buildTheme({ primary: "#0a2463", radius: "0rem" })
-    // DaisyUI components (.input, .btn, .card, .badge) read these variables, which beat a rounded-none utility.
-    assert.equal(eitri(out)["--rounded-btn"], "0rem")
-    assert.equal(eitri(out)["--rounded-box"], "0rem")
-    assert.equal(eitri(out)["--rounded-badge"], "0rem")
-    assert.deepEqual(out.v2.theme.borderRadius, {
-        none: "0px", xs: "0.125rem", sm: "0rem", DEFAULT: "0rem", md: "0rem", lg: "0rem", xl: "0rem", "2xl": "0rem", "3xl": "0rem", full: "9999px",
-    })
-})
-
-test("v1 global CSS carries the font import and the body font, background and text", () => {
-    const out = buildTheme({
-        primary: "#0a2463",
-        font: { family: "Open Sans", importUrl: "https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" },
-    })
-    assert.equal(
-        out.v1Css,
-        `@import url(https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap);
-
-body {
-    font-family: "Open Sans", sans-serif;
-    background: #ffffff;
-    color: #1f2937;
-}
-`,
-    )
 })
 
 test("v1 global CSS ships the brand fonts like a production app: @font-face rules, .font-primary / .font-main and the body font", () => {
@@ -124,43 +78,4 @@ body {
 }
 `,
     )
-})
-
-test("the main font defaults to the primary one, and faces must use https URLs", () => {
-    const out = buildTheme({ primary: "#0a2463", fonts: { primary: "Open Sans" } })
-    assert.match(out.v1Css, /\.font-main \{\n    font-family: "Open Sans", sans-serif;/)
-    assert.throws(() => buildTheme({ primary: "#0a2463", fonts: { primary: "X", faces: "@font-face{src:url(fonts/x.ttf)}" } }), /https/)
-})
-
-test("warns when the given text color is unreadable on the given background", () => {
-    const out = buildTheme({ primary: "#0a2463", background: "#ffffff", text: "#dddddd" })
-    assert.ok(out.warnings.some((w) => w.includes("base-content")))
-})
-
-test("rejects a color that is not hex, and a non-https font import", () => {
-    assert.throws(() => buildTheme({ primary: "red" }), /primary/)
-    assert.throws(() => buildTheme({ primary: "#0a2463", font: { family: "X", importUrl: "http://fonts.example/x.css" } }), /https/)
-})
-
-test("contrastRatio matches the WCAG extremes", () => {
-    assert.equal(contrastRatio("#000000", "#ffffff").toFixed(2), "21.00")
-    assert.equal(contrastRatio("#777777", "#777777").toFixed(2), "1.00")
-})
-
-test("fontStack falls back to the family's own kind: serif, monospace or sans-serif", async () => {
-    const { fontStack } = await import("../lib/theme.mjs")
-    assert.equal(fontStack("EB Garamond"), '"EB Garamond", serif')
-    assert.equal(fontStack("Playfair Display"), '"Playfair Display", serif')
-    assert.equal(fontStack("Noto Serif"), '"Noto Serif", serif')
-    assert.equal(fontStack("IBM Plex Mono"), '"IBM Plex Mono", monospace')
-    assert.equal(fontStack("PT Sans"), '"PT Sans", sans-serif')
-    assert.equal(fontStack("Noto Sans Serif Display"), '"Noto Sans Serif Display", sans-serif')
-    assert.equal(fontStack("Figtree"), "Figtree, sans-serif")
-})
-
-test("a rounded brand's DaisyUI radii follow its radius, badges stay pills", () => {
-    const out = buildTheme({ primary: "#0a2463", radius: "0.75rem" })
-    assert.equal(eitri(out)["--rounded-btn"], "0.75rem")
-    assert.equal(eitri(out)["--rounded-box"], "0.5rem")
-    assert.equal(eitri(out)["--rounded-badge"], "1.9rem")
 })

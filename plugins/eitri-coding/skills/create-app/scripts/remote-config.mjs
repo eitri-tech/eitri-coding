@@ -6,8 +6,8 @@
 //
 // <secrets.json> holds what only the user can give, e.g. Shopify's
 // { "storefrontAccessToken", "clientId", "callbackUrl" } or Wake's { "tcsAccount" }.
-// Keep it out of git. --features is analyze-store.mjs's output: its integrated services and
-// badges are set, its opt-ins become warnings. --set overrides any config path (e.g. appConfigs.headerLogo=<url>).
+// Keep it out of git. --features is analyze-store.mjs's output: its opt-ins become warnings.
+// --set overrides any config path (e.g. appConfigs.headerLogo=<url>, a rebuilt integration's ids).
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { protectConfigFiles, configExample } from "./lib/privateFiles.mjs"

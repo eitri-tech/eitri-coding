@@ -31,6 +31,9 @@ Measured values, top to bottom (375 px):
 - <section>: <sizes, colors as token names, type size/weight, radius, spacing, copy>
 - …
 <Anything this app has that the store page does not show (more steps, logged-in pages): say how to style it.>
+Integrations to rebuild on these screens (`rebuild` in `.eitri/store-features.json`): <service, its requests in
+network.json, the remote config path for its ids>. Rebuild each with `Eitri.http` from the store's own requests and
+code, check it in browser-preview; one that cannot work in the app goes in your report as a gap.
 
 ## The loop (at most two fix rounds after the first render)
 Render: `<commands.render from .eitri/screens.json, one per screen>`

@@ -126,7 +126,7 @@ plugins/eitri-coding/
     eitri-typescript-migrate/    # JS→TS migration for an existing Eitri-App workspace
     eitri-claude-design-migrate/ # Claude Design → Eitri porting
     create-app/                  # Store URL → complete Eitri app (Console via MCP + local repo)
-      scripts/                   # detect-store, wire-app, remote-config, brand-theme (Node, no deps; `npm test`)
+      scripts/                   # detection, analysis, wiring, config, theme, icon, screen checks (Node; rendering uses site-clone's Playwright; `npm test`)
       references/                # Remote config per platform, brand reading, handoff template
     site-clone/                  # Live website → rebuild in the project's framework
       scripts/                   # Playwright capture (scrape.mjs) and screenshot (shot.mjs)

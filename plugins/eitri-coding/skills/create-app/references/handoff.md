@@ -12,7 +12,7 @@ Created by the create-app flow on <YYYY-MM-DD> from <store URL> (<platform>, <ac
 
 | | |
 |---|---|
-| Organization | <name> (`<organizationId>`) |
+| Organization | <name> (`<organizationId>`) — icon: <same as the app / its own from <source> / kept (it had one)> |
 | Application | <name> (`<applicationId>`) — https://console.eitri.tech/applications/<applicationId> |
 | Environments | dev `<envId>` (appKey `<appKey>`), prod `<envId>` (appKey `<appKey>`) |
 | Template | <template name> — <gitUrl> |
@@ -57,7 +57,7 @@ Compare: `.eitri/bottom-bar/store-bar.png`. Still different: <each `bar.json` wa
 
 | Service | In the app |
 |---|---|
-| <name> | integrated (<config path>) / opt-in, not set / needs the native build / not integrated: <what it would take> |
+| <name> | rebuilt (<files>, config <path>) / not rebuilt: <why> / opt-in, not set / needs the native build / not in the app: <what it would take> |
 
 ## Gaps — what the store has and the app does not
 

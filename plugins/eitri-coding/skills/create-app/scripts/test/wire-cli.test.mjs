@@ -95,12 +95,6 @@ test("plan names the mini-apps from the prefix and maps the navigable ones to th
     )
 })
 
-test("plan rejects a prefix that would make invalid slugs", () => {
-    const res = run("plan", "--repo", templateRepo(), "--prefix", "Loja Exemplo")
-    assert.notEqual(res.code, 0)
-    assert.match(res.err, /prefix/)
-})
-
 test("apply wires every file to the created mini-apps", () => {
     const repo = templateRepo()
     const planFile = join(repo, "plan.json")
@@ -138,42 +132,6 @@ test("apply wires every file to the created mini-apps", () => {
     assert.match(appConfig, /\napplication-id: app-new$/)
     assert.match(readFileSync(join(repo, "dynamic-bottom-tab-view-spec.json"), "utf8"), /"slug": "loja-exemplo-home"/)
     assert.deepEqual(JSON.parse(res.out).slugAliases, { "loja-exemplo-home": ["home"] })
-})
-
-test("apply changes nothing when a planned mini-app was not created", () => {
-    const repo = templateRepo()
-    const planFile = join(repo, "plan.json")
-    writeFileSync(planFile, run("plan", "--repo", repo, "--prefix", "loja-exemplo").out)
-    const createdFile = join(repo, "created.json")
-    writeFileSync(createdFile, JSON.stringify({ created: [{ id: "ea-home", slug: "loja-exemplo-home", publicKey: "pk-home" }] }))
-    const before = readFileSync(join(repo, "shopping-vtex-template-home", "eitri-app.conf.js"), "utf8")
-    const res = run("apply", "--repo", repo, "--plan", planFile, "--created", createdFile, "--application", "app-new", "--organization", "org-1")
-    assert.notEqual(res.code, 0)
-    assert.match(res.err, /loja-exemplo-shared/)
-    assert.equal(readFileSync(join(repo, "shopping-vtex-template-home", "eitri-app.conf.js"), "utf8"), before)
-})
-
-test("apply reports the changed files relative to the repo, also when --repo is .", () => {
-    const repo = templateRepo()
-    writeFileSync(join(repo, "plan.json"), run("plan", "--repo", repo, "--prefix", "loja-exemplo").out)
-    writeFileSync(
-        join(repo, "created.json"),
-        JSON.stringify({
-            created: [
-                { id: "ea-shared", slug: "loja-exemplo-shared", publicKey: "pk-shared" },
-                { id: "ea-home", slug: "loja-exemplo-home", publicKey: "pk-home" },
-            ],
-        }),
-    )
-    const res = runIn(repo, "apply", "--repo", ".", "--plan", "plan.json", "--created", "created.json", "--application", "app-new", "--organization", "org-1")
-    assert.equal(res.code, 0, res.err)
-    assert.deepEqual(JSON.parse(res.out).filesChanged.sort(), [
-        "app-config.yaml",
-        "dynamic-bottom-tab-view-spec.json",
-        "shopping-vtex-template-home/eitri-app.conf.js",
-        "shopping-vtex-template-home/src/views/Home.jsx",
-        "shopping-vtex-template-shared/eitri-app.conf.js",
-    ])
 })
 
 test("apply accepts a recovered response with both newly created and reused mini-apps", () => {

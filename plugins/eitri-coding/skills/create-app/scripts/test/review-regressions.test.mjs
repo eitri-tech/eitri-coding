@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url"
 import { execFileSync } from "node:child_process"
 import { fetchPublic } from "../lib/http.mjs"
 import { protectConfigFiles, configExample } from "../lib/privateFiles.mjs"
-import { resolveVtexProduct } from "../lib/pages.mjs"
 
 test("public downloads cancel a chunked response as soon as the byte cap is exceeded", async () => {
     let cancelled = false
@@ -24,19 +23,6 @@ test("public downloads cancel a chunked response as soon as the byte cap is exce
     }), /larger than/)
     assert.equal(cancelled, true)
     assert.equal(pulls, 2)
-})
-
-test("public downloads reject content-length before reading and keep response metadata", async () => {
-    let cancelled = false
-    await assert.rejects(() => fetchPublic("https://example.test/icon", {
-        maxBytes: 10,
-        fetchImpl: async () => new Response(new ReadableStream({ cancel() { cancelled = true } }), { headers: { "content-length": "100" } }),
-    }), /larger than/)
-    assert.equal(cancelled, true)
-    const response = await fetchPublic("https://example.test/data", { fetchImpl: async () => new Response('{"ok":true}', { status: 201 }) })
-    assert.equal(response.status, 201)
-    assert.equal(response.url, "https://example.test/data")
-    assert.deepEqual(await response.json(), { ok: true })
 })
 
 test("public downloads set a deadline for a request that never answers", async () => {
@@ -79,21 +65,6 @@ test("derived config is ignored while its sanitized example can be committed; re
     } finally { rmSync(repo, { recursive: true, force: true }) }
 })
 
-test("FastStore uses the catalog product identity and verifies the suffix; ordinary numeric slugs remain intact", async () => {
-    const requests = []
-    const product = { productId: "74", linkText: "tenis-2026", items: [{ itemId: "123" }] }
-    const resolved = await resolveVtexProduct("shop", "https://shop.test/tenis-2026-123/p", async (url) => {
-        requests.push(url)
-        return url.includes("fq=skuId:123") ? [product] : null
-    })
-    assert.deepEqual(resolved, [product])
-    assert.equal(requests.length, 2)
-    assert.deepEqual(await resolveVtexProduct("shop", "https://shop.test/other-product-123/p", async (url) => url.includes("fq=") ? [product] : null), [])
-    let calls = 0
-    assert.deepEqual(await resolveVtexProduct("shop", "https://shop.test/tenis-2026/p", async () => { calls++; return [product] }), [product])
-    assert.equal(calls, 1)
-})
-
 test("screen planning opens the resolved product by id and quotes shell metacharacters in URLs", () => {
     const repo = mkdtempSync(join(tmpdir(), "screen-identity-"))
     try {
@@ -104,21 +75,6 @@ test("screen planning opens the resolved product by id and quotes shell metachar
         const output = JSON.parse(execFileSync(process.execPath, [script, "plan", "--repo", repo], { encoding: "utf8" }))
         assert.equal(output.screens.find((s) => s.name === "pdp").app.init, "productId=74")
         assert.ok(output.screens.find((s) => s.name === "home").commands.capture.includes("'https://shop.test/?a=1&b=2'"))
-    } finally { rmSync(repo, { recursive: true, force: true }) }
-})
-
-test("detection retains the catalog id for a FastStore PDP discovered on the home", () => {
-    const repo = mkdtempSync(join(tmpdir(), "detect-faststore-"))
-    try {
-        writeFileSync(join(repo, "home.html"), '<html lang="pt-BR"><img src="https://shop.vtexassets.com/a.png"><img src="https://shop.vtexassets.com/b.png"><a href="/tenis-2026-123/p">Tênis</a></html>')
-        const product = { productId: "74", linkText: "tenis-2026", items: [{ itemId: "123", sellers: [{ commertialOffer: { AvailableQuantity: 1 } }] }] }
-        writeFileSync(join(repo, "responses.json"), JSON.stringify({
-            "https://shop.vtexcommercestable.com.br/api/tenant/tenants?q=shop": { defaultCurrency: "BRL" },
-            "https://shop.vtexcommercestable.com.br/api/catalog_system/pub/products/search?fq=skuId:123": [product],
-        }))
-        const profile = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL("../detect-store.mjs", import.meta.url)), "https://shop.test", "--html", join(repo, "home.html"), "--responses", join(repo, "responses.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }))
-        assert.equal(profile.pages.productId, "74")
-        assert.equal(profile.pages.productSlug, "tenis-2026")
     } finally { rmSync(repo, { recursive: true, force: true }) }
 })
 

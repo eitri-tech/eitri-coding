@@ -158,8 +158,16 @@ async function openRenderer(responses) {
     if (responses) return { html: async (target) => responses[`render:${target}`] ?? null, close: async () => {} }
     const chromium = await loadChromium()
     if (!chromium) return undefined
-    const browser = await chromium.launch()
-    const context = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true, userAgent: MOBILE_UA })
+    let browser, context
+    try {
+        browser = await chromium.launch()
+        context = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true, userAgent: MOBILE_UA })
+    } catch (err) {
+        // Playwright without its browser binary: keep what the server-rendered pages gave.
+        await browser?.close().catch(() => {})
+        console.error(`Chromium did not start, listings are read from their server HTML only (${err instanceof Error ? err.message.split("\n")[0] : err}).`)
+        return undefined
+    }
     return {
         async html(target) {
             const page = await context.newPage()

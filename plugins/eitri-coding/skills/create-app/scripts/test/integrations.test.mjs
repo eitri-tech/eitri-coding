@@ -21,20 +21,20 @@ const OCEANE = [
 
 const byId = (list) => Object.fromEntries(list.map((i) => [i.id, i]))
 
-test("Skeepers reviews: detected with its website id and integrated (the app's reviews add-on reads it)", () => {
+test("Skeepers reviews: detected with its website id, for the agent to rebuild from the store's requests", () => {
     const found = byId(detectIntegrations({ urls: OCEANE }))
     assert.deepEqual(found.skeepers.config, { websiteId: "969384d1-eb8a-64e4-a1f2-c46b29a4d241" })
     assert.equal(found.skeepers.category, "reviews")
-    assert.equal(found.skeepers.support, "integrated")
-    assert.deepEqual(found.skeepers.remoteConfig, { "appConfigs.reviews": { provider: "skeepers", websiteId: "969384d1-eb8a-64e4-a1f2-c46b29a4d241" } })
+    assert.equal(found.skeepers.support, "rebuild")
+    assert.equal(found.skeepers.remoteConfig, undefined)
     assert.ok(found.skeepers.evidence.length >= 1)
 })
 
-test("a shoppable-video widget and a chat are reported as not integrated, with what it would take", () => {
+test("a shoppable-video widget is rebuilt (with its caveat); a chat is not in the app", () => {
     const found = byId(detectIntegrations({ urls: OCEANE }))
-    assert.equal(found.widde.support, "none")
+    assert.equal(found.widde.support, "rebuild")
     assert.equal(found.widde.category, "video")
-    assert.match(found.widde.note, /VideoStories/)
+    assert.match(found.widde.note, /browser-preview/)
     assert.equal(found.atendimento.category, "chat")
     assert.equal(found.atendimento.support, "none")
 })
@@ -58,13 +58,7 @@ test("Clarity and reCAPTCHA map onto template config but stay opt-in (the store 
     assert.match(found.recaptcha.note, /domain/)
 })
 
-test("the store's own hosts are not integrations; each integration is listed once", () => {
-    const found = detectIntegrations({ urls: [...OCEANE, ...OCEANE] })
-    assert.equal(found.filter((i) => i.id === "skeepers").length, 1)
-    assert.ok(!found.some((i) => /vtexassets/.test(i.evidence.join(" "))))
-})
-
-test("other review providers are recognized and reported as not integrated", () => {
+test("other review providers are recognized, all to rebuild", () => {
     const found = byId(
         detectIntegrations({
             urls: [
@@ -78,20 +72,14 @@ test("other review providers are recognized and reported as not integrated", () 
     assert.deepEqual(found.yotpo.config, { appKey: "AbCdEf123" })
     for (const id of ["yotpo", "trustvox", "judgeme", "konfidency"]) {
         assert.equal(found[id].category, "reviews")
-        assert.equal(found[id].support, "none")
+        assert.equal(found[id].support, "rebuild")
     }
 })
 
-test("custom elements in the DOM count as evidence (a widget that loaded no request yet)", () => {
-    const found = byId(detectIntegrations({ urls: [], customElements: ["widde-pro-carousel", "x-unknown"] }))
-    assert.ok(found.widde)
-    assert.match(found.widde.evidence.join(" "), /widde-pro-carousel/)
-})
-
-test("every signature has a category, a support level and a note for anything not integrated", () => {
+test("every signature has a category, a support level and a note", () => {
     for (const sig of INTEGRATIONS) {
         assert.ok(sig.category, sig.id)
-        assert.ok(["integrated", "config", "native", "none"].includes(sig.support), sig.id)
-        if (sig.support !== "integrated") assert.ok(sig.note, `${sig.id} needs a note`)
+        assert.ok(["rebuild", "config", "native", "none"].includes(sig.support), sig.id)
+        assert.ok(sig.note, `${sig.id} needs a note`)
     }
 })

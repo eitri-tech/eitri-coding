@@ -2,7 +2,8 @@
 // (site-clone's network.json URLs, script srcs) and the custom elements in its
 // DOM. Each one gets a support level for the Eitri app:
 //
-//   integrated  the create-app add-ons implement it; `remoteConfig` holds the values to set
+//   rebuild     a client-side widget the agent recreates in the app from the capture: the
+//               store's code and HTTP requests (network.json); `config` holds the values found
 //   config      the template supports it through remote config, but the store decides (opt-in)
 //   native      needs the native app build (SDK keys in the shell), out of create-app's scope
 //   none        not in the app: a gap to report, with what it would take (`note`)
@@ -18,6 +19,8 @@ const param = (url, name) => {
     }
 }
 const group = (regex) => (url) => regex.exec(url)?.[1]
+const REVIEWS_NOTE = "Ratings on the product cards and the PDP, from the widget's API calls in network.json."
+const VIDEO_NOTE = "A video carousel fed by the widget's API calls in network.json, placed where the store shows it."
 
 export const INTEGRATIONS = [
     // --- Reviews
@@ -25,51 +28,50 @@ export const INTEGRATIONS = [
         id: "skeepers",
         name: "Skeepers (Opiniões Verificadas) reviews",
         category: "reviews",
-        support: "integrated",
+        support: "rebuild",
         match: /(?:\.skeepers\.io|avis-verifies\.com)/,
         elements: /^skeepers-/,
         extract: (url) => ({ websiteId: group(new RegExp(`(?:websites|generated|product)/(${UUID})`))(url) ?? param(url, "idWebsite") }),
-        remoteConfig: ({ websiteId }) => (websiteId ? { "appConfigs.reviews": { provider: "skeepers", websiteId } } : null),
-        note: "Ratings on the product cards and the PDP through the reviews add-on (appConfigs.reviews).",
+        note: REVIEWS_NOTE,
     },
     {
         id: "yotpo",
         name: "Yotpo reviews",
         category: "reviews",
-        support: "none",
+        support: "rebuild",
         match: /yotpo\.com/,
         extract: (url) => ({ appKey: group(/staticw2\.yotpo\.com\/([A-Za-z0-9]+)\//)(url) }),
-        note: "No Yotpo provider in the reviews add-on yet: add one to ReviewsService (bottomline API by app key).",
+        note: REVIEWS_NOTE,
     },
-    { id: "trustvox", name: "Trustvox reviews", category: "reviews", support: "none", match: /trustvox\.com\.br/, note: "No Trustvox provider in the reviews add-on yet." },
-    { id: "konfidency", name: "Konfidency reviews", category: "reviews", support: "none", match: /konfidency\.com\.br/, note: "No Konfidency provider in the reviews add-on yet." },
-    { id: "judgeme", name: "Judge.me reviews", category: "reviews", support: "none", match: /judge\.me/, note: "No Judge.me provider in the reviews add-on yet." },
-    { id: "okendo", name: "Okendo reviews", category: "reviews", support: "none", match: /okendo\.io/, note: "No Okendo provider in the reviews add-on yet." },
-    { id: "stamped", name: "Stamped reviews", category: "reviews", support: "none", match: /stamped\.io/, note: "No Stamped provider in the reviews add-on yet." },
-    { id: "lily", name: "Lily reviews", category: "reviews", support: "none", match: /lily(?:reviews)?\.(?:com\.br|ai)/, note: "No Lily provider in the reviews add-on yet." },
+    { id: "trustvox", name: "Trustvox reviews", category: "reviews", support: "rebuild", match: /trustvox\.com\.br/, note: REVIEWS_NOTE },
+    { id: "konfidency", name: "Konfidency reviews", category: "reviews", support: "rebuild", match: /konfidency\.com\.br/, note: REVIEWS_NOTE },
+    { id: "judgeme", name: "Judge.me reviews", category: "reviews", support: "rebuild", match: /judge\.me/, note: REVIEWS_NOTE },
+    { id: "okendo", name: "Okendo reviews", category: "reviews", support: "rebuild", match: /okendo\.io/, note: REVIEWS_NOTE },
+    { id: "stamped", name: "Stamped reviews", category: "reviews", support: "rebuild", match: /stamped\.io/, note: REVIEWS_NOTE },
+    { id: "lily", name: "Lily reviews", category: "reviews", support: "rebuild", match: /lily(?:reviews)?\.(?:com\.br|ai)/, note: REVIEWS_NOTE },
 
     // --- Shoppable video / stories / live
     {
         id: "widde",
         name: "Widde shoppable videos (stories)",
         category: "video",
-        support: "none",
+        support: "rebuild",
         match: /widde\.io/,
         elements: /^widde-/,
-        note: "Its API answers browsers only (bot challenge): use the VideoStories section with the store's videos in the CMS, or Widde partner credentials.",
+        note: "Its API answered browsers only (bot challenge) so far: check it from browser-preview; refused → a gap (or Widde partner credentials).",
     },
-    { id: "firework", name: "Firework shoppable videos", category: "video", support: "none", match: /fireworktv\.com|fw\.tv|fwcdn/, elements: /^fw-/, note: "Use the VideoStories section with the store's videos in the CMS." },
-    { id: "tolstoy", name: "Tolstoy shoppable videos", category: "video", support: "none", match: /gotolstoy\.com/, elements: /^tolstoy-/, note: "Use the VideoStories section with the store's videos in the CMS." },
+    { id: "firework", name: "Firework shoppable videos", category: "video", support: "rebuild", match: /fireworktv\.com|fw\.tv|fwcdn/, elements: /^fw-/, note: VIDEO_NOTE },
+    { id: "tolstoy", name: "Tolstoy shoppable videos", category: "video", support: "rebuild", match: /gotolstoy\.com/, elements: /^tolstoy-/, note: VIDEO_NOTE },
     {
         id: "streamshop",
         name: "StreamShop shoppable videos (LiveShop)",
         category: "video",
-        support: "integrated",
+        support: "rebuild",
         match: /streamshop\.com\.br|liveshops\.com\.br/,
         elements: /^liveshop-/,
-        note: "The VideoStories section reads its public feed (the storeSlug and tagName of the store's <liveshop-ads-carousel>), placed where the store shows it.",
+        note: "A video carousel reading its public feed (the storeSlug and tagName of the store's <liveshop-ads-carousel>), placed where the store shows it.",
     },
-    { id: "videowise", name: "Videowise shoppable videos", category: "video", support: "none", match: /videowise\.com/, note: "Use the VideoStories section with the store's videos in the CMS." },
+    { id: "videowise", name: "Videowise shoppable videos", category: "video", support: "rebuild", match: /videowise\.com/, note: VIDEO_NOTE },
     { id: "bambuser", name: "Bambuser live shopping", category: "video", support: "none", match: /bambuser\.com/, note: "Live commerce: Eitri's liveshop dependency covers its own platform, not Bambuser." },
     { id: "mimo", name: "Mimo live shopping", category: "video", support: "none", match: /mimo\.com\.br|mimolive/, note: "Live commerce is not part of the template." },
 
@@ -117,7 +119,7 @@ export const INTEGRATIONS = [
     { id: "insider", name: "Insider", category: "marketing", support: "native", match: /useinsider\.com|insider\.(?:com|io)\/ins/, note: "The template calls Insider through the native SDK (Eitri.exposedApis.insider)." },
     { id: "onesignal", name: "OneSignal push", category: "push", support: "native", match: /onesignal\.com/, note: "Push notifications come from the native build." },
 
-    // --- Marketing / CRM / search (not integrated)
+    // --- Marketing / CRM / search (not in the app)
     { id: "klaviyo", name: "Klaviyo", category: "marketing", support: "none", match: /klaviyo\.com/, note: "No Klaviyo integration in the template (newsletter sign-up, events)." },
     { id: "rdstation", name: "RD Station", category: "marketing", support: "none", match: /rdstation\.com\.br|d335luupugsy2\.cloudfront\.net/, note: "No RD Station integration in the template." },
     { id: "emarsys", name: "Emarsys", category: "marketing", support: "none", match: /emarsys\.(?:net|com)|scarabresearch/, note: "No Emarsys integration in the template." },

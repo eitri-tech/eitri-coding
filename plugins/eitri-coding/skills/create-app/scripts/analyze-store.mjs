@@ -5,8 +5,8 @@
 //   integrations   third-party services (reviews, video, chat, analytics...) with their support level
 //   home           the home's sections from the VTEX IO block tree, and as the template's CMS sections;
 //                  without one (deco.cx, FastStore), the banners from the capture's linked images
-//   productCard    the store's product card features and badges
-//   remoteConfig   values to set in every environment (integrated services, badges)
+//   productCard    the store's product card features, and `badges` (catalog highlights/specifications, colors)
+//   search         VTEX: whether the store's GraphQL search narrows by facet (`legacy: true` when it does not)
 //   optIn          template features the store has but must agree to (e.g. Clarity)
 //   gaps           everything the app does not reproduce, for the confirmation and the handoff
 //
@@ -21,7 +21,7 @@
 // opens what VTEX's pagetype API answers for its path (with --profile of a VTEX account; or --pagetypes:
 // { path: answer }); a `?q=` link opens that search. On VTEX it also checks that the store's GraphQL search
 // narrows by facet (or reads --search-probe: { department, all, byFacet, byQueryMap }): a legacy one does not,
-// and the app's legacy search add-on is switched on (appConfigs.legacySearchFacets).
+// and the app's catalog must send its facets as query/map instead.
 import { fetchPublic, MOBILE_UA } from "./lib/http.mjs"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -283,18 +283,13 @@ async function main(args) {
     const hasBadges = summary.features.some((f) => ["highlights", "specificationBadges"].includes(f.feature)) || summary.highlights
     const badges = hasBadges ? buildBadgeConfig({ summary, catalog, ...page }) : null
 
-    // Remote config: integrated services and badges; config-level ones are proposed
-    const remoteConfig = {}
-    for (const i of integrations) if (i.support === "integrated" && i.remoteConfig) Object.assign(remoteConfig, i.remoteConfig)
-    if (badges) remoteConfig["appConfigs.badges"] = badges.config
-    // Search: a legacy GraphQL search ignores the app's facets; the add-on sends them as query/map instead.
+    // Search: a legacy GraphQL search ignores the app's facets; the app must send them as query/map instead.
     const probeFile = options(args, "--search-probe")[0]
     const probe = probeFile ? JSON.parse(read(probeFile)) : vtex ? await probeVtexSearch(profile.account, origin) : null
     const search = probe ? { ...probe, legacy: vtexLegacySearch(probe) } : null
     if (search?.legacy) {
-        remoteConfig["appConfigs.legacySearchFacets"] = true
         warnings.push(
-            `The store's GraphQL search ignores selectedFacets (legacy catalog resolver: "${search.department}" by facet counts ${search.all} products, the whole catalog; by query/map ${search.byQueryMap}). appConfigs.legacySearchFacets switches the app's catalog to query/map, and its filters to the legacy facet lists (category, brand, specifications; no price ranges).`,
+            `The store's GraphQL search ignores selectedFacets (legacy catalog resolver: "${search.department}" by facet counts ${search.all} products, the whole catalog; by query/map ${search.byQueryMap}): the app's catalog must send its facets as query/map, and its filters read the legacy facet lists (category, brand, specifications; no price ranges).`,
         )
     } else if (vtex && !search) warnings.push("Could not check whether the store's GraphQL search narrows by facet: open a category in the app and check it lists that category.")
     const optIn = integrations.filter((i) => i.support === "config").map((i) => ({ id: i.id, ...(i.remoteConfig ? { remoteConfig: i.remoteConfig } : { config: i.config }), note: i.note }))
@@ -311,10 +306,10 @@ async function main(args) {
         else if (s.texts) gaps.push({ area: "home", item: s.kind, detail: `${s.id}: "${s.texts.join(" · ")}" — no app section reads it: rebuild it by hand (an icon list, a note…) from the capture` })
         else gaps.push({ area: "home", item: s.kind === "unsupported" ? `store component ${s.components.join(", ")}` : s.kind, detail: `block ${s.id}${s.title ? ` ("${s.title}")` : ""}` })
     }
-    const reviewsIntegrated = integrations.some((i) => i.category === "reviews" && i.support === "integrated")
+    const reviewsFound = integrations.some((i) => i.category === "reviews" && i.support === "rebuild")
     for (const f of summary.features) {
         if (f.supported === false) gaps.push({ area: "product card", item: f.feature, detail: `the store shows it (${f.component}); the app's card does not` })
-        if (f.supported === "with a reviews provider" && !reviewsIntegrated) gaps.push({ area: "product card", item: "rating", detail: "the store shows ratings but no supported reviews provider was detected" })
+        if (f.supported === "with a reviews provider" && !reviewsFound) gaps.push({ area: "product card", item: "rating", detail: "the store shows ratings but no supported reviews provider was detected" })
     }
     const explained = (c) => (TAG_COMPONENT.test(c.split("/").pop()) && hasBadges) || WRAPPER_COMPONENT.test(c.split("/").pop())
     const review = summary.customComponents.filter((c) => !explained(c))
@@ -325,8 +320,7 @@ async function main(args) {
         url: origin,
         integrations,
         home: { sections, cmsSections, skipped },
-        productCard: summary,
-        remoteConfig,
+        productCard: badges ? { ...summary, badges: badges.config } : summary,
         search,
         optIn,
         gaps,

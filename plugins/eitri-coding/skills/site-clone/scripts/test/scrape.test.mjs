@@ -165,3 +165,25 @@ test('inline svgs are named by their own class (an SVG className is not a string
   const names = JSON.parse(readFileSync(join(dir, 'assets', 'svgs.json'), 'utf8')).map(s => s.name).sort()
   assert.deepEqual(names, ['icon-cart', 'search-box'])
 })
+
+test('API calls in network.json keep their method, body and an answer sample (to rebuild an integration); never headers', { timeout: 150000 }, async () => {
+  const { createServer } = await import('node:http')
+  const page = '<html><body><h1>Loja</h1><script>fetch("/api/ratings", { method: "POST", headers: { "content-type": "application/json", "x-key": "secret" }, body: JSON.stringify({ ref: [40951] }) })</script></body></html>'
+  const server = createServer((req, res) => {
+    if (req.url === '/api/ratings') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ 40951: { average: 4.6, count: 12 } })) }
+    res.setHeader('content-type', 'text/html'); res.end(page)
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const out = mkdtempSync(join(tmpdir(), 'scrape-'))
+    const { execFile } = await import('node:child_process')
+    await new Promise((resolve, reject) => execFile(process.execPath, [script, `http://127.0.0.1:${server.address().port}/`, '--out', out, '--name', 'page', '--bp', '375', '--primary', '375', '--no-assets', '--wait', '1000'], { timeout: 120000 }, err => (err ? reject(err) : resolve())))
+    const call = JSON.parse(readFileSync(join(out, 'page', 'network.json'), 'utf8')).find(r => r.url.endsWith('/api/ratings'))
+    assert.equal(call.method, 'POST')
+    assert.equal(call.postData, '{"ref":[40951]}')
+    assert.deepEqual(JSON.parse(call.response), { 40951: { average: 4.6, count: 12 } })
+    assert.ok(!JSON.stringify(call).includes('secret'), 'request headers are not recorded')
+  } finally {
+    server.close()
+  }
+})

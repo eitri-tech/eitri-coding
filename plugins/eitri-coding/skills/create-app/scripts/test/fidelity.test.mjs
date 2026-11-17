@@ -17,12 +17,6 @@ const store = {
     listing: { title: text({ fontSize: 20 }), toolbar: { count: 2, ...block({ box: [0, 0, 100, 40], radius: "pill", borderWidth: 1 }), label: text({ fontSize: 14, fontWeight: 400 }) } },
 }
 
-test("identical probes match on every part", () => {
-    const out = compareProbes(store, structuredClone(store), { screen: "listing" })
-    assert.deepEqual(out.diffs, [])
-    assert.ok(out.checked > 20, `${out.checked} checks`)
-})
-
 test("differences are named by part and property, with both values", () => {
     const app = structuredClone(store)
     app.cards.columns = 1

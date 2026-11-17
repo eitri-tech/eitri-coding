@@ -108,7 +108,8 @@ scrape/<slug>/
     images.json svgs.json   inline SVGs deduplicated, most-used first
   behaviors.json         sticky bars, carousels, accordions, dialogs, transitions, forms
   screenshots/           <bp>-fullpage, <bp>-viewport, sections/<NN>-<name>@<bp>
-  network.json manifest.json
+  network.json           every request; API calls (xhr/fetch) also keep method, body and an answer sample
+  manifest.json
 ```
 
 **Reading a section tree.** Each file is `{ styleSets, tree }`. A node carries

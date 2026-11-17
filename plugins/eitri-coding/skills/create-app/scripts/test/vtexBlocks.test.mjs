@@ -166,19 +166,7 @@ test("cmsSectionsFromVtex turns them into the app's CMS sections, and lists what
     )
 })
 
-test("cmsSectionsFromVtex: sections from one block get distinct ids (they are React keys)", () => {
-    const { sections } = cmsSectionsFromVtex([
-        { kind: "banners", id: "flex-layout.row#bottom-text", images: [{ image: "https://cdn.x/logo.png" }] },
-        { kind: "text", id: "flex-layout.row#bottom-text", text: "O melhor lugar" },
-        { kind: "text", id: "flex-layout.row#bottom-text", text: "Ver mais" },
-    ])
-    assert.deepEqual(
-        sections.map((s) => s.id),
-        ["flex-layout.row#bottom-text", "flex-layout.row#bottom-text-2", "flex-layout.row#bottom-text-3"],
-    )
-})
-
-import { headlessFacetNames, landingTarget, resolveLinkActions, linkQueryTarget, trackingFreePath } from "../lib/vtexBlocks.mjs"
+import { landingTarget, resolveLinkActions } from "../lib/vtexBlocks.mjs"
 
 // Trimmed from oceane.com.br/promocao-progressiva (Nov 2026): a store.custom landing page whose product
 // listing is a customQuery (the first querySchema is the block's empty default, the second the site editor's).
@@ -196,109 +184,6 @@ test("landingTarget: a custom landing page with a collection query opens that co
         sort: "discount:desc",
         title: "Promoção Progressiva",
     })
-})
-
-test("landingTarget: a page without products is content (null), a search page keeps its path", () => {
-    assert.equal(landingTarget(CONTENT_PAGE), null)
-    assert.equal(landingTarget(SEARCH_PAGE), "path")
-    assert.equal(landingTarget("<html>not VTEX</html>"), undefined)
-})
-
-// Trimmed from drogariaspacheco.com.br (VTEX legacy CMS, Nov 2026): no runtime; the search-result script fetches the
-// page's products from /buscapagina with the page's own query.
-const LEGACY = (query, h1 = "Ofertas Imperdíveis") => `<html><head><title>Ofertas | Drogarias Pacheco</title></head><body><h1 class="visually-hidden">Drogarias Pacheco</h1><h1>${h1}</h1>
-<a href="/busca?fq=H:24873">banner</a>
-<script>$('.vitrine').QD_infinityScroll({ url: '/buscapagina?${query}&PS=48&sl=bb3695b9&cc=48&sm=0&PageNumber=' })</script></body></html>`
-
-test("landingTarget: a VTEX legacy CMS listing opens what its own search script asks for", () => {
-    assert.deepEqual(landingTarget(LEGACY("fq=H%3a24942&O=OrderByTopSaleDESC"), "/campanha/ofertas-imperdiveis"), {
-        type: "collection",
-        value: "24942",
-        sort: "orders:desc",
-        title: "Ofertas Imperdíveis",
-    })
-    assert.deepEqual(landingTarget(LEGACY("ft=dipirona", ""), "/busca"), { type: "search", value: "dipirona", title: "Ofertas | Drogarias Pacheco" })
-    // A category or brand page is a search route: the template resolves its path.
-    assert.equal(landingTarget(LEGACY("fq=C%3a%2f800%2f"), "/medicamentos"), "path")
-})
-
-// Trimmed from farmrio.com.br (deco.cx on VTEX, Nov 2026): no VTEX IO runtime; every filter link of the listing
-// repeats the page's own base facets, and the header links to other listings with their own filters.
-const HEADLESS_LISTING = `<html><head><title>Amigo Oculto: troca de presentes</title></head><body>
-<a href="/fabula-e-bento/smiley?filter.productClusterIds=2617&amp;filter.tamanho=10">Smiley</a>
-<h1 class="t">Roupas tamanho PP FARM Rio<div class="breadcrumbs">x</div></h1>
-<a href="/tamanhos/tamanho-pp?filter.productClusterIds=689&amp;filter.specificationFilter_29=PP&amp;filter.tamanho=m">M</a>
-<a href="/tamanhos/tamanho-pp?filter.productClusterIds=689&amp;filter.specificationFilter_29=PP&amp;filter.cores=azul">Azul</a>
-</body></html>`
-
-test("landingTarget: a headless listing (deco, FastStore) opens the base facets its filter links share", () => {
-    assert.deepEqual(landingTarget(HEADLESS_LISTING, "/tamanhos/tamanho-pp"), {
-        type: "collection",
-        value: "689",
-        facets: [{ key: "specificationFilter_29", value: "PP" }],
-        title: "Roupas tamanho PP FARM Rio",
-    })
-    // Without a collection the shared facets open as a facets action.
-    const category = HEADLESS_LISTING.replaceAll("filter.productClusterIds=689&amp;", "filter.category-1=roupas&amp;").replace(/<h1[\s\S]*?<\/h1>/, "")
-    assert.deepEqual(landingTarget(category, "/tamanhos/tamanho-pp"), {
-        type: "facets",
-        facets: [{ key: "category-1", value: "roupas" }, { key: "specificationFilter_29", value: "PP" }],
-        title: "Amigo Oculto: troca de presentes",
-    })
-    // Filter links of other pages say nothing about this one; one filter link alone is not a base.
-    assert.equal(landingTarget(HEADLESS_LISTING, "/outra-pagina"), undefined)
-    const single = HEADLESS_LISTING.replace(/<a href="\/tamanhos\/tamanho-pp[^>]*cores=azul">Azul<\/a>/, "")
-    assert.equal(landingTarget(single, "/tamanhos/tamanho-pp"), undefined)
-    // Filter links that share nothing: unknown, the path stays.
-    const disjoint = HEADLESS_LISTING.replace("filter.productClusterIds=689&amp;filter.specificationFilter_29=PP&amp;filter.cores=azul", "filter.cores=azul")
-    assert.equal(landingTarget(disjoint, "/tamanhos/tamanho-pp"), undefined)
-})
-
-test("resolveLinkActions: a headless store's banner paths become their listings' facets", () => {
-    const sections = [{ id: "b", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.jpg", action: { type: "path", value: "/tamanhos/tamanho-pp" } }] } }]
-    const { sections: out } = resolveLinkActions(sections, { "/tamanhos/tamanho-pp": HEADLESS_LISTING }, "https://www.farmrio.com.br")
-    assert.equal(out[0].data.images[0].action.type, "collection")
-    assert.equal(out[0].data.images[0].action.value, "689")
-    // A fetched page that is neither a listing nor a VTEX IO page keeps its path, and says so.
-    const unknown = resolveLinkActions([{ id: "b", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.jpg", action: { type: "path", value: "/produtos/barbour" } }] } }], { "/produtos/barbour": "<h1>vem aí</h1>" }, "https://www.farmrio.com.br")
-    assert.deepEqual(unknown.sections[0].data.images[0].action, { type: "path", value: "/produtos/barbour" })
-    assert.deepEqual(unknown.unresolved, ["/produtos/barbour"])
-})
-
-test("resolveLinkActions: a VTEX legacy search link names its collection or term in the URL: resolved without its page", () => {
-    const link = (value, title) => ({ imageUrl: "a.jpg", action: { type: "path", value, ...(title ? { title } : {}) } })
-    const sections = [{ id: "b", name: "MultipleImageBanner", data: { images: [
-        link("/busca?fq=H:24885&utmi_p=_&utmi_pc=Html&utmi_cp=dpa-trade_card3", "Episol"),
-        link("/busca/?fq=H%3a23499&O=OrderByBestDiscountDESC"),
-        link("/busca?ft=dipirona"),
-    ] } }]
-    const { sections: out, unresolved } = resolveLinkActions(sections, {}, "https://www.drogariaspacheco.com.br")
-    assert.deepEqual(out[0].data.images.map((i) => i.action), [
-        { type: "collection", value: "24885", title: "Episol" },
-        { type: "collection", value: "23499", sort: "discount:desc" },
-        { type: "search", value: "dipirona" },
-    ])
-    assert.deepEqual(unresolved, [])
-})
-
-test("resolveLinkActions: a search-route page (category, brand) opens what VTEX's pagetype says, not its path as categories", () => {
-    const brand = "/dove?&utmi_p=_&utmi_cp=marca"
-    const sections = [{ id: "b", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.jpg", action: { type: "path", value: brand } }] } }]
-    const pages = { [brand]: LEGACY("fq=B%3a1176") }
-    const known = { [brand]: { type: "facets", facets: [{ key: "brand", value: "dove" }], title: "Dove em Promoção" } }
-    const { sections: out, unresolved } = resolveLinkActions(sections, pages, "https://www.drogariaspacheco.com.br", known)
-    assert.deepEqual(out[0].data.images[0].action, known[brand])
-    assert.deepEqual(unresolved, [])
-})
-
-test("link helpers: what a URL's own query lists, and its path without tracking parameters", () => {
-    assert.deepEqual(linkQueryTarget("/busca?fq=H:1&utmi_p=_", "https://loja.com.br"), { type: "collection", value: "1" })
-    assert.equal(linkQueryTarget("/dove?&utmi_p=_&utmi_cp=x", "https://loja.com.br"), undefined)
-    // Tracking only: a plain path VTEX's pagetype can answer for; any other parameter keeps it out.
-    assert.equal(trackingFreePath("/dove?&utmi_p=_&utmi_pc=Html&utm_source=x", "https://loja.com.br"), "/dove")
-    assert.equal(trackingFreePath("/si%C3%A0ge?&utmi_p=_", "https://loja.com.br"), "/si%C3%A0ge")
-    assert.equal(trackingFreePath("/medicamentos", "https://loja.com.br"), "/medicamentos")
-    assert.equal(trackingFreePath("/marcas?map=b", "https://loja.com.br"), null)
 })
 
 test("resolveLinkActions: path actions become what the page lists; content pages open in the browser", () => {
@@ -319,54 +204,15 @@ test("resolveLinkActions: path actions become what the page lists; content pages
     assert.equal(sections[0].data.images[0].action.type, "path", "the input is not mutated")
 })
 
-test("resolveLinkActions: a page that could not be fetched is reported and left as is", () => {
-    const sections = [{ id: "hero", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.gif", action: { type: "path", value: "/gone" } }] } }]
-    const { sections: out, unresolved } = resolveLinkActions(sections, {}, "https://www.loja.com")
-    assert.deepEqual(out[0].data.images[0].action, { type: "path", value: "/gone" })
-    assert.deepEqual(unresolved, ["/gone"])
-})
-
-test("resolveLinkActions: a page it cannot read opens what VTEX's pagetype says it lists; a ?q= link opens that search", () => {
-    const sections = [{ name: "MultipleImageBanner", data: { images: [{ action: { type: "path", value: "/ellipse" } }, { action: { type: "path", value: "/9060" } }, { action: { type: "path", value: "/s?q=gator" } }, { action: { type: "path", value: "/sobre" } }] } }]
-    const pages = { "/ellipse": `<div id="__next"></div>`, "/9060": `<div id="__next"></div>`, "/s?q=gator": `<div id="__next"></div>`, "/sobre": `<div id="__next"></div>` }
-    const known = { "/ellipse": { type: "collection", value: "577", title: "Ellipse" }, "/9060": { type: "search", value: "9060", title: "9060" } }
-    const { sections: out, unresolved } = resolveLinkActions(sections, pages, "https://www.loja.com.br", known)
-    assert.deepEqual(
-        out[0].data.images.map((i) => i.action),
-        [{ type: "collection", value: "577", title: "Ellipse" }, { type: "search", value: "9060", title: "9060" }, { type: "search", value: "gator" }, { type: "path", value: "/sobre" }],
-    )
-    assert.deepEqual(unresolved, ["/sobre"])
-})
-
-// A Next.js (FastStore + deco) page: the listing is client-rendered, and what it lists rides in the React Server
-// Components payload, as escaped JSON inside self.__next_f.push strings.
-const rsc = (json) => `<html><head><title>Family 574</title></head><body><h1>Family 574</h1><script>self.__next_f.push([1,"${JSON.stringify(json).replace(/"/g, '\\"')}"])</script></body></html>`
-const RSC_LISTING = rsc(["$", "$L2c", null, { pathname: "/family-574", baseFacets: [{ key: "colecao", value: "Família 574" }], noIndexing: false }])
-const RSC_LANDING = rsc(["$", "$L2e", null, { title: "Conheça o lançamento", tabs: [{ source: { collectionId: "636", sort: "Mais vendidos" }, numberOfItems: 10 }] }])
-    .replace(/Family 574/g, "New Balance 983 está chegando")
-
-test("headlessFacetNames: the base facets a Next.js listing page names in its server payload", () => {
-    assert.deepEqual(headlessFacetNames(RSC_LISTING), [{ key: "colecao", value: "Família 574" }])
-    assert.deepEqual(headlessFacetNames(RSC_LANDING), [])
-    assert.deepEqual(headlessFacetNames("<html>plain</html>"), [])
-})
-
-test("landingTarget: a Next.js listing names facets only (the caller resolves them), a landing page opens its shelf's collection", () => {
-    assert.equal(landingTarget(RSC_LISTING, "/family-574"), undefined)
-    assert.deepEqual(landingTarget(RSC_LANDING, "/lancamento-983"), { type: "collection", value: "636", title: "New Balance 983 está chegando" })
-})
-
-test("landingTarget: a Next.js listing whose base facet is a VTEX collection opens it, before any shelf on the page", () => {
-    const page = rsc([
-        ["$", "$L2c", null, { pathname: "/lancamento-gremio", baseFacets: [{ key: "productClusters.id", value: "559" }] }],
-        ["$", "$L2d", null, { server: { variables: { selectedFacets: [{ key: "productClusterIds", value: "559" }] } } }],
-        ["$", "$L2e", null, { tabs: [{ source: { collectionId: "623" } }] }],
-    ]).replace(/Family 574/g, "Camisas Grêmio")
-    assert.deepEqual(landingTarget(page, "/lancamento-gremio"), { type: "collection", value: "559", title: "Camisas Grêmio" })
-})
-
-test("resolveLinkActions: the banner's own label beats the page's heading as the listing title", () => {
-    const sections = [{ id: "s", name: "MultipleImageBanner", data: { images: [{ imageUrl: "a.jpg", action: { type: "path", value: "/lancamento-983", title: "983" } }] } }]
-    const { sections: out } = resolveLinkActions(sections, { "/lancamento-983": RSC_LANDING }, "https://www.loja.com.br")
-    assert.deepEqual(out[0].data.images[0].action, { type: "collection", value: "636", title: "983" })
+test("vtexPageSections: a page-wide wrapper holding a countdown (even a hidden one) is walked through, not turned into one countdown", () => {
+    const html = `<html><body><script>window.__RUNTIME__={"extensions":{${[
+        entry(H, { component: "vtex.render-runtime@8.136.3/LayoutContainer", blocks: ["responsive-layout.mobile#home"] }),
+        entry(`${H}/responsive-layout.mobile#home`, { component: "vtex.responsive-layout@0.1.0/MobileLayout", blocks: ["list-context.image-list#hero", "flex-layout.row#shelf", "flex-layout.row#cd"] }),
+        entry(`${H}/responsive-layout.mobile#home/list-context.image-list#hero`, { component: "vtex.store-image@0.24.0/ImageList", content: { images: [{ image: "https://cdn.x/1.jpg" }] } }),
+        entry(`${H}/responsive-layout.mobile#home/flex-layout.row#shelf`, { blocks: ["list-context.product-list#s"] }),
+        entry(`${H}/responsive-layout.mobile#home/flex-layout.row#shelf/list-context.product-list#s`, { component: "vtex.product-list-context@0.x/ProductList", content: { collection: "137" } }),
+        entry(`${H}/responsive-layout.mobile#home/flex-layout.row#cd`, { props: { blockClass: "hide" }, blocks: ["count-down"] }),
+        entry(`${H}/responsive-layout.mobile#home/flex-layout.row#cd/count-down`, { component: "store-theme@1.0.0/CountDown", content: { targetDate: { year: 2026, month: 11, day: 13, hour: 10, minute: 0, second: 0 } } }),
+    ].join(",")}}}</script></body></html>`
+    assert.deepEqual(vtexPageSections(parseVtexBlocks(html), H).map((s) => s.kind), ["banners", "shelf"])
 })

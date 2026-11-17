@@ -1,5 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "description": "Files the create-app add-ons copy into a template repo. Only listed files are copied; this one makes their pure modules importable by the scripts tests."
-}

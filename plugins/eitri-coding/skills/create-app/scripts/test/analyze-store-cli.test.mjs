@@ -9,12 +9,6 @@ import { fileURLToPath } from "node:url"
 const script = join(dirname(fileURLToPath(import.meta.url)), "..", "analyze-store.mjs")
 
 /** A saved search probe of a store whose facets narrow the list (Intelligent Search): keeps the tests offline. */
-function ioSearch() {
-    const file = join(mkdtempSync(join(tmpdir(), "probe-")), "search-probe.json")
-    writeFileSync(file, JSON.stringify({ department: "roupas", all: 5000, byFacet: 800, byQueryMap: 800 }))
-    return file
-}
-
 function entry(path, { component, blocks = [], content = {} }) {
     const body = { before: [], blockId: path, blocks: blocks.map((id) => ({ extensionPointId: id })), component, props: {}, content }
     return `"${path.replaceAll("/", "\\u002F")}":${JSON.stringify(body)}`
@@ -82,10 +76,10 @@ test("analyze-store: integrations, the home's sections, the card's badges and ev
     assert.deepEqual(
         out.integrations.map((i) => [i.id, i.support]),
         [
-            ["skeepers", "integrated"],
+            ["skeepers", "rebuild"],
             ["clarity", "config"],
             ["atendimento", "none"],
-            ["widde", "none"],
+            ["widde", "rebuild"],
         ],
     )
     assert.equal(out.integrations.find((i) => i.id === "widde").placeholder, true, "the widget was still a skeleton when captured")
@@ -104,27 +98,18 @@ test("analyze-store: integrations, the home's sections, the card's badges and ev
         "a banner opens what its landing page lists, not a guessed category",
     )
 
-    assert.deepEqual(out.remoteConfig["appConfigs.reviews"], { provider: "skeepers", websiteId: "969384d1-eb8a-64e4-a1f2-c46b29a4d241" })
-    assert.deepEqual(out.remoteConfig["appConfigs.badges"].highlights, { allow: ["Tag PREÇO DE BLACK"], stripPrefixes: ["Tag "], styles: { "PREÇO DE BLACK": { bgColor: "#000000", textColor: "#ff66c8" } } })
-    assert.deepEqual(out.remoteConfig["appConfigs.badges"].specifications, { names: ["Selos"], values: { Vegano: { bgColor: "#b6c48c", textColor: "#383935" } } })
-    assert.equal(out.remoteConfig["appConfigs.clarityId"], undefined, "opt-in integrations are proposed, not set")
+    assert.equal(out.remoteConfig, undefined, "nothing is set for the app: the agent rebuilds from these facts")
+    assert.deepEqual(out.integrations.find((i) => i.id === "skeepers").config, { websiteId: "969384d1-eb8a-64e4-a1f2-c46b29a4d241" })
+    assert.deepEqual(out.productCard.badges.highlights, { allow: ["Tag PREÇO DE BLACK"], stripPrefixes: ["Tag "], styles: { "PREÇO DE BLACK": { bgColor: "#000000", textColor: "#ff66c8" } } })
+    assert.deepEqual(out.productCard.badges.specifications, { names: ["Selos"], values: { Vegano: { bgColor: "#b6c48c", textColor: "#383935" } } })
     assert.deepEqual(out.optIn, [{ id: "clarity", remoteConfig: { "appConfigs.clarityId": "abc123" }, note: out.integrations.find((i) => i.id === "clarity").note }])
 
     const gaps = out.gaps.map((g) => `${g.area}: ${g.item}`)
     assert.ok(gaps.includes("integration: atendimen.to chat"), gaps.join(" | "))
-    assert.ok(gaps.includes("integration: Widde shoppable videos (stories)"))
+    assert.ok(!gaps.includes("integration: Widde shoppable videos (stories)"), "a widget to rebuild is not a gap")
     assert.ok(gaps.includes("home: newsletter"))
     assert.ok(gaps.includes("product card: similars"))
-    assert.ok(!gaps.some((g) => /rating|specificationBadges|highlights/.test(g)), "covered: ratings through Skeepers, badges through the add-on")
-})
-
-test("analyze-store without a VTEX block tree still reports integrations", () => {
-    const { dir, catalog } = capture()
-    writeFileSync(join(dir, "page.raw.html"), "<html><body>no runtime</body></html>")
-    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog], { encoding: "utf8" }))
-    assert.ok(out.integrations.length >= 3)
-    assert.deepEqual(out.home.cmsSections, [])
-    assert.match(out.warnings.join(" "), /no VTEX IO block tree/)
+    assert.ok(!gaps.some((g) => /rating|specificationBadges|highlights/.test(g)), "covered: ratings rebuilt from Skeepers, badges from the catalog")
 })
 
 test("analyze-store on a headless store (deco, FastStore): the home's linked images become banners that open their listings", () => {
@@ -174,82 +159,7 @@ test("analyze-store on a headless store (deco, FastStore): the home's linked ima
     assert.ok(out.gaps.some((g) => g.area === "home" && g.item === "app download banner"), JSON.stringify(out.gaps))
 })
 
-test("analyze-store on a headless VTEX store: banner links whose pages it cannot read open what VTEX's pagetype says (--pagetypes offline)", () => {
-    const { dir, catalog } = capture()
-    writeFileSync(join(dir, "page.raw.html"), "<html><body>no runtime</body></html>")
-    mkdirSync(join(dir, "layout"))
-    writeFileSync(join(dir, "layout", "sections.json"), JSON.stringify({ sections: [{ index: 0, name: "00-header-header", tag: "header" }, { index: 1, name: "01-images-carousel", tag: "section" }] }))
-    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ primaryBreakpoint: 375 }))
-    writeFileSync(
-        join(dir, "content", "outline.json"),
-        JSON.stringify([
-            { section: 1, type: "img", src: "https://loja.vtexassets.com/arquivos/a.jpg", box: [0, 92, 375, 486], href: "https://www.loja.com.br/ellipse" },
-            { section: 1, type: "img", src: "https://loja.vtexassets.com/arquivos/b.jpg", box: [375, 92, 375, 486], href: "https://www.loja.com.br/9060" },
-        ]),
-    )
-    const linkPages = join(dir, "pages.json")
-    writeFileSync(linkPages, JSON.stringify({ "/ellipse": `<div id="__next"></div>`, "/9060": `<div id="__next"></div>` }))
-    const pagetypes = join(dir, "pagetypes.json")
-    writeFileSync(
-        pagetypes,
-        JSON.stringify({
-            "/ellipse": { id: "577", name: "Ellipse", url: "loja.vtexcommercestable.com.br/577?map=productClusterIds", pageType: "Collection" },
-            "/9060": { id: null, name: "9060", url: "loja.vtexcommercestable.com.br/9060", pageType: "FullText", hits: 27 },
-        }),
-    )
-    const profile = join(dir, "profile.json")
-    writeFileSync(profile, JSON.stringify({ platform: "VTEX", account: "loja", locale: "pt-BR" }))
-    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--link-pages", linkPages, "--pagetypes", pagetypes, "--profile", profile, "--search-probe", ioSearch()], { encoding: "utf8" }))
-    assert.deepEqual(
-        out.home.cmsSections[0].data.images.map((i) => i.action),
-        [{ type: "collection", value: "577", title: "Ellipse" }, { type: "search", value: "9060", title: "9060" }],
-    )
-    assert.doesNotMatch(out.warnings.join(" "), /Could not open or read/)
-})
-
-test("analyze-store on a Next.js VTEX store: a listing page's base facet names its collection, a landing page opens its shelf's collection", () => {
-    const { dir, catalog } = capture()
-    writeFileSync(join(dir, "page.raw.html"), "<html><body>no runtime</body></html>")
-    mkdirSync(join(dir, "layout"))
-    writeFileSync(join(dir, "layout", "sections.json"), JSON.stringify({ sections: [{ index: 0, name: "00-header-header", tag: "header" }, { index: 1, name: "01-images-carousel", tag: "section" }] }))
-    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ primaryBreakpoint: 375 }))
-    writeFileSync(
-        join(dir, "content", "outline.json"),
-        JSON.stringify([
-            { section: 1, type: "img", src: "https://loja.vtexassets.com/arquivos/a.jpg", box: [0, 92, 375, 486], href: "https://www.loja.com.br/family-574" },
-            { section: 1, type: "img", src: "https://loja.vtexassets.com/arquivos/b.jpg", box: [375, 92, 375, 486], href: "https://www.loja.com.br/lancamento-983" },
-        ]),
-    )
-    const push = (json) => `<script>self.__next_f.push([1,"${JSON.stringify(json).replace(/"/g, '\\"')}"])</script>`
-    const linkPages = join(dir, "pages.json")
-    writeFileSync(
-        linkPages,
-        JSON.stringify({
-            "/family-574": `<title>Family 574</title>${push({ pathname: "/family-574", baseFacets: [{ key: "colecao", value: "Família 574" }] })}`,
-            "/lancamento-983": `<title>983</title><h1>New Balance 983</h1>${push({ tabs: [{ source: { collectionId: "636" } }] })}`,
-        }),
-    )
-    const pagetypes = join(dir, "pagetypes.json")
-    writeFileSync(
-        pagetypes,
-        JSON.stringify({
-            // The page's own path is unknown to the catalog (a search that happens to find products)…
-            "/family-574": { id: null, name: "family-574", url: "loja.vtexcommercestable.com.br/family-574", pageType: "FullText", hits: 3 },
-            // …but the collection it names is.
-            "/familia-574": { id: "177", name: "Família 574", url: "loja.vtexcommercestable.com.br/177?map=productClusterIds", pageType: "Collection" },
-        }),
-    )
-    const profile = join(dir, "profile.json")
-    writeFileSync(profile, JSON.stringify({ platform: "VTEX", account: "loja", locale: "pt-BR" }))
-    const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--link-pages", linkPages, "--pagetypes", pagetypes, "--profile", profile, "--search-probe", ioSearch()], { encoding: "utf8" }))
-    assert.deepEqual(
-        out.home.cmsSections[0].data.images.map((i) => i.action),
-        [{ type: "collection", value: "177", title: "Família 574" }, { type: "collection", value: "636", title: "New Balance 983" }],
-    )
-    assert.doesNotMatch(out.warnings.join(" "), /Could not open or read/)
-})
-
-test("analyze-store on a VTEX store whose GraphQL search ignores facets: the legacy search add-on is switched on (--search-probe offline)", () => {
+test("analyze-store on a VTEX store whose GraphQL search ignores facets: search.legacy and a warning (--search-probe offline)", () => {
     const { dir, catalog, linkPages } = capture()
     const profile = join(dir, "profile.json")
     writeFileSync(profile, JSON.stringify({ platform: "VTEX", account: "loja", host: "https://www.loja.com.br" }))
@@ -258,13 +168,11 @@ test("analyze-store on a VTEX store whose GraphQL search ignores facets: the leg
     const probe = join(dir, "search-probe.json")
     writeFileSync(probe, JSON.stringify({ department: "medicamentos", all: 94816, byFacet: 94816, byQueryMap: 11630 }))
     const out = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--profile", profile, "--search-probe", probe, "--link-pages", linkPages, "--pagetypes", pagetypes], { encoding: "utf8" }))
-    assert.equal(out.remoteConfig["appConfigs.legacySearchFacets"], true)
     assert.deepEqual(out.search, { department: "medicamentos", all: 94816, byFacet: 94816, byQueryMap: 11630, legacy: true })
-    assert.ok(out.warnings.some((w) => /selectedFacets/.test(w) && /legacySearchFacets/.test(w)), out.warnings.join("\n"))
+    assert.ok(out.warnings.some((w) => /selectedFacets/.test(w) && /query.map/.test(w)), out.warnings.join("\n"))
     // A store whose facets narrow the list keeps the template's search.
     writeFileSync(probe, JSON.stringify({ department: "maquiagem", all: 5000, byFacet: 800, byQueryMap: 800 }))
     const io = JSON.parse(execFileSync(process.execPath, [script, "https://www.loja.com.br/", "--capture", dir, "--catalog", catalog, "--profile", profile, "--search-probe", probe, "--link-pages", linkPages, "--pagetypes", pagetypes], { encoding: "utf8" }))
-    assert.equal(io.remoteConfig["appConfigs.legacySearchFacets"], undefined)
     assert.equal(io.search.legacy, false)
 })
 

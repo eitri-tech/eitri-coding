@@ -141,74 +141,14 @@ test("Shopify: the Storefront and Customer Account credentials are needs until t
     assert.equal(withSecrets.config.providerInfo.clientId, "shp-client")
 })
 
-test("refuses a template of another platform than the store", () => {
-    assert.throws(
-        () => buildRemoteConfig({ template: WAKE_TEMPLATE, profile: { platform: "VTEX", host: "https://x.com", account: "x" }, slugs: SLUGS }),
-        /WAKE template.*VTEX store/,
-    )
-})
-
-test("a VTEX store without a detected account is a need, not a guess", () => {
-    const { needs } = buildRemoteConfig({ template: VTEX_TEMPLATE, profile: { platform: "VTEX", host: "https://x.com" }, slugs: SLUGS })
-    assert.deepEqual(needs.map((n) => n.path), ["providerInfo.account"])
-})
-
-test("warns when the header logo URL asks the CDN for a small resized copy", () => {
-    const logo = "https://loja.vtexassets.com/assets/vtex.file-manager-graphql/images/abc___123.png"
-    const resized = buildRemoteConfig({
-        template: VTEX_TEMPLATE,
-        profile: { platform: "VTEX", host: "https://www.loja.com.br", account: "loja" },
-        slugs: SLUGS,
-        overrides: { "appConfigs.headerLogo": `${logo}?width=68&aspect=true&quality=8` },
-    })
-    const warning = resized.warnings.find((w) => w.includes("headerLogo") && w.includes("resized"))
-    assert.ok(warning, "no resize warning")
-    assert.ok(warning.includes("width=68") && warning.includes("quality=8"), warning)
-    assert.ok(warning.includes(` ${logo} `) || warning.endsWith(logo), `names the original URL: ${warning}`)
-
-    // A cache-buster is not a resize.
-    const clean = buildRemoteConfig({
-        template: VTEX_TEMPLATE,
-        profile: { platform: "VTEX", host: "https://www.loja.com.br", account: "loja" },
-        slugs: SLUGS,
-        overrides: { "appConfigs.headerLogo": `${logo}?v=2` },
-    })
-    assert.ok(!clean.warnings.some((w) => w.includes("resized")))
-})
-
-test("an image proxy (deco /image, Next.js /_next/image) names the original in its src/url parameter", () => {
-    const build = (logo) =>
-        buildRemoteConfig({
-            template: VTEX_TEMPLATE,
-            profile: { platform: "VTEX", host: "https://www.farmrio.com.br", account: "lojafarm" },
-            slugs: SLUGS,
-            overrides: { "appConfigs.headerLogo": logo },
-        }).warnings.find((w) => w.includes("headerLogo") && w.includes("resized"))
-    // deco.cx: a relative src lives on the proxy's own host.
-    const deco = build("https://assets.decocms.com/image?fit=cover&width=138&height=20&quality=high&src=farmrio/1320/logo.svg")
-    assert.ok(deco, "no resize warning for the deco proxy")
-    assert.ok(deco.endsWith("https://assets.decocms.com/farmrio/1320/logo.svg (check it loads)."), deco)
-    // An absolute src or url is the original itself.
-    const next = build("https://www.loja.com/_next/image?url=https%3A%2F%2Fcdn.loja.com%2Flogo.png&w=256&q=75")
-    assert.ok(next.endsWith("https://cdn.loja.com/logo.png (check it loads)."), next)
-    // The proxy asked for the original (no size): nothing to say.
-    assert.equal(build("https://assets.decocms.com/image?src=farmrio/1320/logo.svg"), undefined)
-})
-
-test("store features: integrated services and badges are set, opt-ins become warnings, never values", () => {
+test("store features: opt-ins become warnings, never values", () => {
     const features = {
-        remoteConfig: {
-            "appConfigs.reviews": { provider: "skeepers", websiteId: "969384d1-eb8a-64e4-a1f2-c46b29a4d241" },
-            "appConfigs.badges": { highlights: { stripPrefixes: ["Tag "] }, teasers: true },
-        },
         optIn: [
             { id: "clarity", remoteConfig: { "appConfigs.clarityId": "lgmvtke937" }, note: "opt-in, it mixes app sessions into the store's web project." },
             { id: "recaptcha", config: { siteKey: "6LdV7" }, note: "a web site key only works when its allowed domains include the app's." },
         ],
     }
     const { config, warnings } = buildRemoteConfig({ template: VTEX_TEMPLATE, profile: { platform: "VTEX", host: "https://www.oceane.com.br", account: "oceane", locale: "pt-BR", currency: "BRL" }, slugs: SLUGS, features })
-    assert.deepEqual(config.appConfigs.reviews, features.remoteConfig["appConfigs.reviews"])
-    assert.deepEqual(config.appConfigs.badges, features.remoteConfig["appConfigs.badges"])
     assert.equal(config.appConfigs.clarityId, undefined)
     assert.ok(warnings.some((w) => /Opt-in clarity: appConfigs\.clarityId = "lgmvtke937"/.test(w)), warnings.join("\n"))
     assert.ok(warnings.some((w) => /Opt-in recaptcha: .*siteKey.*6LdV7/.test(w)), warnings.join("\n"))

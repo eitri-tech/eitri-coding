@@ -101,11 +101,11 @@ function plain(markdown) {
         .filter(Boolean)
 }
 
-function descendants(blocks, path) {
+function descendants(blocks, path, { skip } = {}) {
     const out = []
     const walk = (p) => {
         const block = blocks.get(p)
-        if (!block) return
+        if (!block || skip?.(block)) return
         out.push(block)
         block.children.forEach(walk)
     }
@@ -114,6 +114,18 @@ function descendants(blocks, path) {
 }
 
 const hidden = (block) => block.data.renderChildren === false || block.data.blockClass === "hide" || is.desktopOnly(block.component)
+
+/**
+ * A block that is one countdown section: the countdown itself, or a wrapper of a shown countdown with at most its
+ * title and one image. A wrapper holding other sections too (a whole page row, the home) is walked through instead.
+ */
+function countdownGroup(blocks, block) {
+    if (is.countdown(block.component)) return true
+    const shown = descendants(blocks, block.path, { skip: hidden }).slice(1)
+    if (!shown.some((b) => is.countdown(b.component))) return false
+    const sections = shown.filter((b) => is.productList(b.component, b.id) || is.imageList(b.component) || is.tabLayout(b.component) || is.video(b.component) || is.newsletter(b.component))
+    return !sections.length && shown.filter((b) => is.image(b.component)).length <= 1
+}
 
 function shelfFrom(list) {
     const d = list.data
@@ -162,10 +174,11 @@ export function vtexPageSections(blocks, page = "store.home", { utcOffset } = {}
         const c = block.component
         const all = descendants(blocks, path)
         if (is.chrome(c)) return
-        if (all.some((b) => is.countdown(b.component)) && !is.productList(c, block.id)) {
-            const counter = all.find((b) => is.countdown(b.component))
-            const image = all.find((b) => is.image(b.component) && b.data.src)
-            const title = all.filter((b) => is.richText(b.component)).flatMap((b) => plain(b.data.text))[0]
+        if (countdownGroup(blocks, block)) {
+            const shown = descendants(blocks, path, { skip: hidden })
+            const counter = shown.find((b) => is.countdown(b.component))
+            const image = shown.find((b) => is.image(b.component) && b.data.src)
+            const title = shown.filter((b) => is.richText(b.component)).flatMap((b) => plain(b.data.text))[0]
             const section = { kind: "countdown", id: topId, targetDate: isoDate(counter.data.targetDate, utcOffset) }
             if (title) section.title = title
             if (image) {

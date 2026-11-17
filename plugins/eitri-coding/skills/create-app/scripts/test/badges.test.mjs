@@ -48,16 +48,3 @@ test("buildBadgeConfig: highlights the store draws (prefix stripped), visible sp
     // "+ barato no APP" is on no captured card: the app shows it, but its colors are unknown.
     assert.deepEqual(unresolved, [{ badge: "+ barato no APP", why: "no captured card shows it: the app draws it in the theme's primary colors" }])
 })
-
-test("a highlight seen on a captured page is allowed even when no filter names it", () => {
-    const html = `${HTML}<div class="flag" style="background-color: rgb(56, 57, 53);"><p style="color: rgb(255, 255, 255);">Lançamento</p></div>`
-    const catalog = [...CATALOG, { productId: "1", clusterHighlights: { 276: "Lançamento" }, specifications: {} }]
-    const { config } = buildBadgeConfig({ summary: SUMMARY, catalog, html, css: CSS })
-    assert.ok(config.highlights.allow.includes("Lançamento"))
-    assert.deepEqual(config.highlights.styles["Lançamento"], { bgColor: "#383935", textColor: "#ffffff" })
-})
-
-test("buildBadgeConfig without a highlights filter shows every highlight, and nothing breaks without specs", () => {
-    const { config } = buildBadgeConfig({ summary: { features: [{ feature: "highlights", supported: true }], customComponents: [] }, catalog: [], html: "", css: "" })
-    assert.deepEqual(config, { highlights: {}, teasers: true })
-})

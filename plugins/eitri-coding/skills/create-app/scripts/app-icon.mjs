@@ -15,7 +15,9 @@
 // Prints JSON: every candidate with its real size and verdict, the chosen one,
 // `upload` (the upload_application_icon arguments) and `icon` (the local preview,
 // <out>/icon.png, what the MCP will upload). Exit 0 when `upload` is ready,
-// 3 when the logo needs --background, 4 when no source qualifies.
+// 3 when the logo needs --background, 4 when no source qualifies (including a logo
+// whose margins hide a mark too small to fill the minimum without upscaling).
+// --out keeps a second icon apart (e.g. .eitri/org-icon for an organization of another brand).
 import { fetchPublic, MOBILE_UA } from "./lib/http.mjs"
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
@@ -70,7 +72,8 @@ async function main(args) {
     let url = args[0]
     if (!url || url.startsWith("--")) {
         console.error("usage: app-icon.mjs <url> [--capture <dir> | --html <file>] [--logo <url>] [--background <#rrggbb>] [--out <dir>] [--no-render]")
-        process.exit(2)
+        process.exitCode = 2
+        return
     }
     if (!/^https?:\/\//.test(url)) url = `https://${url}`
     const unknown = args.slice(1).filter((a, i, all) => a.startsWith("--") && !VALUED.includes(a) && a !== "--no-render" && !VALUED.includes(all[i - 1]))
@@ -99,7 +102,18 @@ async function main(args) {
     if (ranking.chosen && !args.includes("--no-render") && (ranking.upload || ranking.chosen.kind !== "logo")) {
         const { renderIcon } = await import("./lib/iconRender.mjs")
         const chosen = ranking.chosen
-        const rendered = await renderIcon({ bytes: readFileSync(chosen.file), image: chosen.image, mode: chosen.kind === "logo" ? "logo" : "icon", background })
+        let rendered
+        try {
+            rendered = await renderIcon({ bytes: readFileSync(chosen.file), image: chosen.image, mode: chosen.kind === "logo" ? "logo" : "icon", background })
+        } catch (err) {
+            // Ranked on its full size, the logo is trimmed to render: its mark alone may be too small.
+            if (chosen.kind !== "logo" || !/upscaling/.test(String(err?.message))) throw err
+            Object.assign(report, { chosen: null, upload: null, error: `${err.message} No icon: set it by hand.` })
+            writeFileSync(join(out, "icon.json"), JSON.stringify(report, null, 2))
+            console.log(JSON.stringify(report, null, 2))
+            process.exitCode = 4
+            return
+        }
         const file = join(out, "icon.png")
         writeFileSync(file, rendered.png)
         report.icon = { file, width: rendered.width, height: rendered.height, ...(rendered.logoColor ? { logoColor: rendered.logoColor, contrast: rendered.contrast } : {}) }
@@ -109,11 +123,12 @@ async function main(args) {
     }
     writeFileSync(join(out, "icon.json"), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report, null, 2))
-    if (!ranking.chosen) process.exit(4)
-    if (!ranking.upload) process.exit(3)
+    // exitCode, not exit(): exiting with fetch's keep-alive sockets still open aborts Node on Windows.
+    if (!ranking.chosen) process.exitCode = 4
+    else if (!ranking.upload) process.exitCode = 3
 }
 
 main(process.argv.slice(2)).catch((err) => {
     console.error(err instanceof Error ? err.message : err)
-    process.exit(1)
+    process.exitCode = 1
 })

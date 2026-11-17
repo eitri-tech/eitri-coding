@@ -984,6 +984,17 @@ async function main () {
     const ct = (res.headers()['content-type'] || '').split(';')[0]
     const rec = { url, type, status: res.status(), contentType: ct }
     network.push(rec)
+    // API calls (a reviews widget, a video feed…): what they send and a sample of the answer, so the
+    // integration can be rebuilt from them. Never request headers or cookies.
+    if ((type === 'xhr' || type === 'fetch') && ct !== 'text/css') {
+      rec.method = req.method()
+      const post = req.postData()
+      if (post) rec.postData = clip(post, 4096)
+      if (/json|text|javascript|xml/.test(ct)) {
+        try { rec.response = clip((await res.body()).toString('utf8'), 8192) } catch {}
+      }
+      return
+    }
     if (responses.has(url)) return
     if (!/stylesheet|font|image|media/.test(type) && ct !== 'text/css') return
     try {
@@ -1334,6 +1345,10 @@ function siteOf (host) {
   const labels = host.toLowerCase().split('.')
   const n = labels.length >= 3 && labels.at(-1).length === 2 && /^(com|net|org|gov|edu|co)$/.test(labels.at(-2)) ? 3 : 2
   return labels.slice(-n).join('.')
+}
+
+function clip (text, max) {
+  return text.length > max ? `${text.slice(0, max)}… (${text.length} chars)` : text
 }
 
 /** Third-party domains the page requested, most requests first; the store's own (its name in the host) are left out. */

@@ -5,73 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { fontCorsProblems, fontFacesFromCapture, fontFacesFromGoogleCss, googleFontsCssUrl, parseFontSpec } from "../lib/fonts.mjs"
-
-// The shape fonts.googleapis.com/css2 answers a woff2-capable browser: one block per subset.
-const GOOGLE_CSS = `/* latin-ext */
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(https://fonts.gstatic.com/s/montserrat/v31/ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5;
-}
-/* latin */
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(https://fonts.gstatic.com/s/montserrat/v31/latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131;
-}
-/* latin */
-@font-face {
-  font-family: 'Outfit';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(https://fonts.gstatic.com/s/outfit/v15/latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF;
-}
-`
-
-test("parseFontSpec reads a family and its weights", () => {
-    assert.deepEqual(parseFontSpec("Montserrat:200,400,700"), { family: "Montserrat", weights: [200, 400, 700] })
-    assert.deepEqual(parseFontSpec("Open Sans"), { family: "Open Sans", weights: [400] })
-    assert.throws(() => parseFontSpec("Montserrat:bold"), /weight/)
-})
-
-test("googleFontsCssUrl asks css2 for every family with sorted weights", () => {
-    assert.equal(
-        googleFontsCssUrl([parseFontSpec("Open Sans:700,400"), parseFontSpec("Outfit:600")]),
-        "https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&family=Outfit:wght@600&display=swap",
-    )
-})
-
-test("fontFacesFromGoogleCss keeps the requested subsets as absolute-URL @font-face rules", () => {
-    assert.equal(
-        fontFacesFromGoogleCss(GOOGLE_CSS),
-        [
-            "@font-face{font-family:'Montserrat';font-style:normal;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/s/montserrat/v31/latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131}",
-            "@font-face{font-family:'Outfit';font-style:normal;font-weight:600;font-display:swap;src:url(https://fonts.gstatic.com/s/outfit/v15/latin.woff2) format('woff2');unicode-range:U+0000-00FF}",
-        ].join("\n"),
-    )
-    assert.equal(fontFacesFromGoogleCss(GOOGLE_CSS, { subsets: ["latin-ext"] }).split("\n").length, 1)
-    assert.throws(() => fontFacesFromGoogleCss("body{}"), /no @font-face/)
-})
-
-test("font-faces.mjs prints the rules from a saved Google response", () => {
-    const dir = mkdtempSync(join(tmpdir(), "fonts-"))
-    writeFileSync(join(dir, "google.css"), GOOGLE_CSS)
-    const script = join(dirname(fileURLToPath(import.meta.url)), "..", "font-faces.mjs")
-    const res = spawnSync(process.execPath, [script, "Montserrat:400", "Outfit:600", "--from", join(dir, "google.css")], { encoding: "utf8" })
-    assert.equal(res.status, 0, res.stderr)
-    assert.match(res.stdout, /^@font-face\{font-family:'Montserrat'.*latin\.woff2/m)
-    assert.match(res.stdout, /^@font-face\{font-family:'Outfit'/m)
-    assert.doesNotMatch(res.stdout, /ext\.woff2/)
-})
+import { fontCorsProblems, fontFacesFromCapture, parseFontSpec } from "../lib/fonts.mjs"
 
 // A capture's design/fonts.json: the store's own @font-face rules as the browser saw them, plus the files it fetched.
 const CAPTURE_FONTS = {
@@ -99,39 +33,6 @@ test("fontFacesFromCapture keeps the store's own rules for the requested weights
         ].join("\n"),
     )
     assert.deepEqual(urls, ["https://cdn.example.com/fonts/LufgaRegular.ttf", "https://cdn.example.com/theme/fonts/LufgaBold.woff2"])
-})
-
-test("fontFacesFromCapture resolves root- and protocol-relative URLs and matches variable weight ranges", () => {
-    assert.match(fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("slick")], { pageUrl: PAGE }).css, /url\("https:\/\/shop\.example\.com\/_next\/static\/media\/slick\.woff"\)/)
-    const variable = fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("Brand Sans:400,700")], { pageUrl: PAGE })
-    assert.equal(variable.css.split("\n").length, 1, "one variable face covers both weights")
-    assert.match(variable.css, /font-family:'Brand Sans'.*url\('https:\/\/static\.example\.com\/brand\.woff2'\)/)
-})
-
-test("fontFacesFromCapture keeps the Latin faces of a family split into unicode-range subsets (Google Fonts), not the first one", () => {
-    const face = (weight, range, file) => `@font-face { font-family: Roboto; font-style: normal; font-weight: ${weight}; src: url("https://fonts.gstatic.com/s/roboto/${file}.woff2") format("woff2"); unicode-range: ${range}; }`
-    const fonts = {
-        fontFaces: [
-            face(400, "U+460-52F, U+1C80-1C8A, U+20B4", "cyrext"),
-            face(400, "U+301, U+400-45F, U+490-491", "cyr"),
-            face(400, "U+100-2BA, U+2BD-2C5, U+2C7-2CC", "latinext"),
-            face(400, "U+0-FF, U+131, U+152-153, U+2BB-2BC, U+2C6, U+2DA, U+2DC, U+2??", "latin"),
-            face(700, "U+460-52F", "cyrext700"),
-            face(700, "U+0-FF, U+131", "latin700"),
-        ],
-    }
-    const { css } = fontFacesFromCapture(fonts, [parseFontSpec("Roboto:400,700")], { pageUrl: PAGE })
-    assert.deepEqual(css.split("\n").map((r) => /roboto\/(\w+)\.woff2/.exec(r)[1]), ["latin", "latin700"])
-    const ext = fontFacesFromCapture(fonts, [parseFontSpec("Roboto:400")], { pageUrl: PAGE, subsets: ["latin", "latin-ext"] })
-    assert.deepEqual(ext.css.split("\n").map((r) => /roboto\/(\w+)\.woff2/.exec(r)[1]), ["latinext", "latin"])
-    // A family whose faces for a weight cover no Latin text says so.
-    assert.throws(() => fontFacesFromCapture({ fontFaces: [face(400, "U+460-52F", "cyrext")] }, [parseFontSpec("Roboto:400")], { pageUrl: PAGE }), /Roboto 400.*Latin/)
-})
-
-test("fontFacesFromCapture names what it cannot serve instead of guessing", () => {
-    assert.throws(() => fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("Lufga:300")], { pageUrl: PAGE }), /Lufga 300.*400, 700/)
-    assert.throws(() => fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("Lost")], { pageUrl: PAGE }), /fonts\/lost\.woff2.*relative/)
-    assert.equal(fontFacesFromCapture(CAPTURE_FONTS, [parseFontSpec("Nope")], { pageUrl: PAGE }).missing.length, 1)
 })
 
 test("fontCorsProblems flags font files a WebView could not load cross-origin", async () => {

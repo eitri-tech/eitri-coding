@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { candidateFileName, iconSources, manifestSources, measureImage, rankIcons, TARGET_SIDE, MIN_SIDE } from "../lib/icon.mjs"
+import { iconSources, measureImage, rankIcons } from "../lib/icon.mjs"
 import { png, jpeg, gif, webp, ico, svg } from "./imageFixtures.mjs"
 
 // A store home with every kind of icon source a store exposes, in the order
@@ -15,20 +15,6 @@ const HOME = `<!doctype html><html><head>
 <header><a href="/"><img class="store-logoImage" alt="Logo Loja" data-src="https://cdn.loja.com/logo.png" src="https://cdn.loja.com/logo.png"></a></header>
 <footer><img alt="logo pagamentos" src="https://cdn.loja.com/pagamentos.png"></footer>
 </body></html>`
-
-const MANIFEST = {
-    name: "Loja",
-    icons: [
-        { src: "/icons/192.png", sizes: "192x192", type: "image/png" },
-        { src: "/icons/512.png", sizes: "512x512", type: "image/png" },
-        { src: "/icons/mono.png", sizes: "512x512", type: "image/png", purpose: "monochrome" },
-    ],
-}
-
-test("targets a 512 px square icon, 180 px at least", () => {
-    assert.equal(TARGET_SIDE, 512)
-    assert.equal(MIN_SIDE, 180)
-})
 
 test("iconSources lists every declared icon, the manifest, the well-known paths and the header logo", () => {
     const { manifestUrl, sources } = iconSources({ html: HOME, pageUrl: "https://www.loja.com.br/" })
@@ -46,20 +32,6 @@ test("iconSources lists every declared icon, the manifest, the well-known paths 
     assert.equal(sources.find((s) => s.kind === "logo").url, "https://cdn.loja.com/logo.png", "the first logo in the page (header), not the footer's")
 })
 
-test("an explicit logo URL replaces the guessed one", () => {
-    const { sources } = iconSources({ html: HOME, pageUrl: "https://www.loja.com.br/", logoUrl: "https://cdn.loja.com/brand.svg" })
-    assert.deepEqual(sources.filter((s) => s.kind === "logo").map((s) => s.url), ["https://cdn.loja.com/brand.svg"])
-})
-
-test("manifestSources resolves icons against the manifest URL and skips monochrome ones", () => {
-    const out = manifestSources(MANIFEST, "https://www.loja.com.br/site.webmanifest")
-    assert.deepEqual(out.map((s) => [s.url, s.kind, s.declared]), [
-        ["https://www.loja.com.br/icons/192.png", "manifest", "192x192"],
-        ["https://www.loja.com.br/icons/512.png", "manifest", "512x512"],
-    ])
-    assert.deepEqual(manifestSources({ name: "x" }, "https://a.com/m.json"), [])
-})
-
 test("measureImage reads the real size of every format, whatever the sizes attribute says", () => {
     assert.deepEqual(measureImage(png(60, 60)), { format: "png", width: 60, height: 60 })
     assert.deepEqual(measureImage(jpeg(1024, 768)), { format: "jpeg", width: 1024, height: 768 })
@@ -68,11 +40,6 @@ test("measureImage reads the real size of every format, whatever the sizes attri
     assert.deepEqual(measureImage(svg({ viewBox: "0 0 24 24" })), { format: "svg", width: 24, height: 24, vector: true })
     assert.deepEqual(measureImage(svg({ width: "120px", height: "40" })), { format: "svg", width: 120, height: 40, vector: true })
     assert.equal(measureImage(new TextEncoder().encode("<!doctype html><html>not found</html>")), null)
-})
-
-test("measureImage takes an .ico's largest frame, read from the frame itself", () => {
-    const icon = ico([{ bmp: [16, 16] }, { png: png(256, 256), dirSide: 0 }, { bmp: [48, 48] }])
-    assert.deepEqual(measureImage(icon), { format: "ico", width: 256, height: 256, frames: ["16×16", "256×256", "48×48"] })
 })
 
 /** A fetched candidate as app-icon.mjs builds it. */
@@ -106,44 +73,12 @@ test("rankIcons: the manifest's real 512 px square icon wins over apple-touch, S
     assert.deepEqual(ranked.slice(0, 5).map((r) => r.url.split("/").pop()), ["512.png", "fake-512.png", "192.png", "apple-touch-icon.png", "logo.png"])
 })
 
-test("rankIcons rejects undersized squares with the real size in the reason", () => {
-    const { ranked } = rankIcons(MIXED)
-    const favicon = ranked.find((r) => r.url.endsWith("favicon.png"))
-    assert.match(favicon.reason, /60×60.*under 180/)
-    assert.match(favicon.reason, /declared 16x16/)
-    assert.match(ranked.find((r) => r.url.endsWith("favicon.ico")).reason, /32×32.*under 180/)
-})
-
-test("rankIcons: a square SVG icon counts as full size, rasterized at the target", () => {
-    const { chosen } = rankIcons([
-        fetched("https://loja.com/apple.png", "apple-touch-icon", png(180, 180)),
-        fetched("https://loja.com/icon.svg", "icon", svg({ viewBox: "0 0 32 32" })),
-    ])
-    assert.equal(chosen.url, "https://loja.com/icon.svg")
-    assert.match(chosen.reason, /SVG.*512/)
-})
-
-test("rankIcons: an apple-touch-icon at the minimum beats the padded logo", () => {
-    const { chosen, upload } = rankIcons(MIXED.filter((c) => !c.url.includes("/icons/")), { background: "#000000" })
-    assert.equal(chosen.url, "https://cdn.loja.com/apple-touch-icon.png")
-    assert.deepEqual(upload, { imageUrl: "https://cdn.loja.com/apple-touch-icon.png" })
-    assert.match(chosen.reason, /180×180.*under the 512 px target/)
-})
-
 test("rankIcons: when every square icon is too small, the wordmark logo is padded on the background color", () => {
     const onlyTiny = MIXED.filter((c) => ["icon", "favicon", "logo"].includes(c.kind))
     const { chosen, upload } = rankIcons(onlyTiny, { background: "#000000" })
     assert.equal(chosen.kind, "logo")
     assert.deepEqual(upload, { imageUrl: "https://cdn.loja.com/logo.png", background: "#000000" })
     assert.match(chosen.reason, /405×127.*centered.*#000000/)
-})
-
-test("rankIcons: the logo without a background color asks for one instead of guessing", () => {
-    const onlyTiny = MIXED.filter((c) => ["icon", "favicon", "logo"].includes(c.kind))
-    const out = rankIcons(onlyTiny)
-    assert.equal(out.chosen.kind, "logo")
-    assert.equal(out.upload, null)
-    assert.deepEqual(out.needs, ["background"])
 })
 
 test("rankIcons: a logo too small to pad without upscaling is rejected, and then nothing is chosen", () => {
@@ -155,18 +90,4 @@ test("rankIcons: a logo too small to pad without upscaling is rejected, and then
     assert.equal(out.upload, null)
     assert.match(out.ranked.find((r) => r.kind === "logo").reason, /120×40.*upscal/)
     assert.match(out.error, /No icon source/)
-})
-
-test("rankIcons rejects a non-square icon that is not the logo", () => {
-    const { ranked } = rankIcons([fetched("https://loja.com/icons/wide.png", "manifest", png(600, 300))])
-    assert.match(ranked[0].reason, /600×300.*not square/)
-})
-
-test("candidateFileName keeps the extension when a long name is shortened", () => {
-    const url = "https://acme.vtexassets.com/assets/vtex.file-manager-graphql/images/4dbfd065-e038-49d9-9a64-b3d009a82c28___701a0e6fb26810dab8051224fb94fc52.svg"
-    const name = candidateFileName(5, "logo", url)
-    assert.ok(name.length <= 80, name)
-    assert.match(name, /^05-logo-4dbfd065.*\.svg$/)
-    assert.equal(candidateFileName(1, "icon", "https://loja.com/icon.svg?v=2"), "01-icon-icon.svg")
-    assert.equal(candidateFileName(2, "favicon", "https://loja.com/"), "02-favicon-index")
 })

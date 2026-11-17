@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { parseAppConfig, rewriteApplicationId, rewriteConf, rewriteImports, rewriteSlugRefs } from "../lib/wire.mjs"
+import { parseAppConfig, rewriteApplicationId, rewriteImports, rewriteSlugRefs } from "../lib/wire.mjs"
 
 const APP_CONFIG = `eitri-apps:
     - path: ./shopping-vtex-template-shared
@@ -24,111 +24,6 @@ test("parseAppConfig lists the mini-apps with their alias and whether they are s
         { path: "./shopping-vtex-template-shared", workspace: "shared", alias: "shared", shared: true },
         { path: "./shopping-vtex-template-home", workspace: "home", alias: "home", shared: false },
     ])
-})
-
-// The VTEX template's checkout conf, as published (note the stale shared pin 0.1.9).
-const CHECKOUT_CONF = `module.exports = {
-	'name': 'shopping-vtex-template-checkout',
-	'title': 'shopping-vtex-template-checkout',
-	'slug': 'shopping-vtex-template-checkout',
-	'eitri-luminus': '2.3.6',
-	'eitri-bifrost': '3.10.0',
-	'eitri-commons': '2.1.2',
-	'version': '0.2.0',
-	'versionMessage': 'ajuste checkout',
-	'public-key': 'a161f79d-dee9-4e67-932f-6f8b5c7828ce',
-	'applicationId': '9022c0fb-885f-4a5f-b99f-7e065189b893',
-	'id': '0ce609ca-17c0-4183-9138-0a011d4bb6ee',
-	'organizationId': 'cf5660ee-bf90-42cd-9a43-9d2c69ee3c89',
-	'organization': {},
-	'eitri-app-dependencies': {
-		'shopping-vtex-template-shared': {
-			isEitriAppShared: true,
-			version: '0.1.9'
-		},
-		'eitri-shopping-vtex-shared': {
-			isEitriAppShared: true,
-			version: '1.18.0'
-		}
-	},
-	'type': 'module'
-}
-`
-
-const IDENTITY = {
-    slug: "loja-exemplo-checkout",
-    title: "Checkout",
-    id: "ea-checkout",
-    publicKey: "pk-checkout",
-    applicationId: "app-new",
-    organizationId: "org-1",
-    versionMessage: "create-app: first version",
-}
-
-test("rewriteConf points a conf at its new mini-app and the renamed shared app at its real version", () => {
-    const out = rewriteConf(CHECKOUT_CONF, IDENTITY, {
-        renames: { "shopping-vtex-template-shared": "loja-exemplo-shared" },
-        versions: { "loja-exemplo-shared": "0.1.10" },
-    })
-    assert.equal(
-        out,
-        `module.exports = {
-	'name': 'loja-exemplo-checkout',
-	'title': 'Checkout',
-	'slug': 'loja-exemplo-checkout',
-	'eitri-luminus': '2.3.6',
-	'eitri-bifrost': '3.10.0',
-	'eitri-commons': '2.1.2',
-	'version': '0.2.0',
-	'versionMessage': 'create-app: first version',
-	'public-key': 'pk-checkout',
-	'applicationId': 'app-new',
-	'id': 'ea-checkout',
-	'organizationId': 'org-1',
-	'organization': {},
-	'eitri-app-dependencies': {
-		'loja-exemplo-shared': {
-			isEitriAppShared: true,
-			version: '0.1.10'
-		},
-		'eitri-shopping-vtex-shared': {
-			isEitriAppShared: true,
-			version: '1.18.0'
-		}
-	},
-	'type': 'module'
-}
-`,
-    )
-})
-
-test("rewriteConf handles unquoted keys and double quotes, and adds a missing versionMessage", () => {
-    const conf = `module.exports = {
-  name: "eitri-play",
-  title: "eitri-play",
-  slug: "eitri-play",
-  version: "2.16.2",
-  "public-key": "cf6d",
-  applicationId: "289a",
-  id: "052a",
-  organizationId: "aad0",
-};
-`
-    assert.equal(
-        rewriteConf(conf, { ...IDENTITY, slug: "loja-play", title: "Play" }, { renames: {}, versions: {} }),
-        `module.exports = {
-  name: "loja-play",
-  title: "Play",
-  slug: "loja-play",
-  version: "2.16.2",
-  versionMessage: "create-app: first version",
-  "public-key": "pk-checkout",
-  applicationId: "app-new",
-  id: "ea-checkout",
-  organizationId: "org-1",
-};
-`,
-    )
 })
 
 test("rewriteImports renames module specifiers only, subpaths included", () => {

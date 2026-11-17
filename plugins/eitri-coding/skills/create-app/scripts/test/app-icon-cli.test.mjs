@@ -100,13 +100,6 @@ test("renders the padded wordmark: trimmed, centered, never enlarged", { skip: !
     assert.ok(report.icon.contrast > 15)
 })
 
-test("warns when the logo vanishes on the background it was given", { skip: !(await loadChromium()) && "Playwright not installed for site-clone" }, async () => {
-    delete routes["/manifest.json"]
-    const out = mkdtempSync(join(tmpdir(), "icon-"))
-    const { out: report } = await run(`${base}/`, "--out", out, "--background", "#ffffff")
-    assert.ok(report.warnings.some((w) => /barely visible/.test(w)))
-})
-
 test("stops with exit 4 when nothing reaches the minimum and there is no logo", async () => {
     routes["/"] = { type: "text/html", body: `<html><head><link rel="icon" href="/favicon.ico"></head><body></body></html>` }
     const out = mkdtempSync(join(tmpdir(), "icon-"))

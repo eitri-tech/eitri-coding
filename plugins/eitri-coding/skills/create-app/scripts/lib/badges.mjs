@@ -1,5 +1,5 @@
-// Works out the product-card badges a store shows and how they look, for the
-// app's badges add-on (appConfigs.badges). Sources, all standard VTEX:
+// Works out the product-card badges a store shows and how they look (analyze-store's
+// productCard.badges), for the agent to rebuild them in the app. Sources, all standard VTEX:
 //   - highlights (clusterHighlights): collections flagged for display; a store often hides them from the native
 //     component and draws them with its own tag (e.g. "Tag PREÇO DE BLACK" shown as "PREÇO DE BLACK");
 //   - specification values (e.g. group "Selos" → "Vegano"), of which the store may hide some with CSS;
@@ -83,7 +83,7 @@ const TAG_COMPONENT = /tag|selo|flag|badge|stamp/i
 /**
  * @param summary  vtexProductSummary(): the card's features, custom components and highlight filters
  * @param catalog  captured products: { clusterHighlights: {id: name}, specifications: {name: [values]} }
- * @returns { config: appConfigs.badges, unresolved: [{ badge, why }] }
+ * @returns { config: the badges (productCard.badges), unresolved: [{ badge, why }] }
  */
 export function buildBadgeConfig({ summary, catalog = [], html = "", css = "" }) {
     const features = Object.fromEntries((summary?.features ?? []).map((f) => [f.feature, f]))

@@ -136,8 +136,7 @@ export function buildRemoteConfig({ template, profile, slugs, secrets = {}, over
         )
     }
 
-    // What analyze-store.mjs found: integrated services and badges are set; opt-ins are the store's call.
-    for (const [path, value] of Object.entries(features?.remoteConfig ?? {})) setPath(config, path, value)
+    // What analyze-store.mjs found that the template reads natively is opt-in: the store's call.
     for (const opt of features?.optIn ?? []) {
         const values = opt.remoteConfig
             ? Object.entries(opt.remoteConfig).map(([path, value]) => `${path} = ${JSON.stringify(value)}`)
