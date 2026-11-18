@@ -31,8 +31,17 @@ Turns a store URL into a working Eitri app. Three tools do the work — never mi
 Check, and stop with the fix if one fails:
 
 1. The MCP is connected: call `list_my_organizations`. If it fails, tell the user to run `/mcp` and log in to `plugin:eitri-coding:eitri-manager`.
-2. The Eitri CLI: `eitri --version` (install: `npm i -g eitri-cli`) and a **working** login: `eitri workspace list` must exit 0 — it is the cheap call that authenticates (`eitri workspace current` only reads local files and passes with expired credentials, which then fail the first `push-version` with `403 WrongUserOrPwd`, after every Console write). If it fails, ask the user to run `! eitri login` (interactive). Still failing after it: `EITRI_CLI_CLIENT_ID` / `EITRI_CLI_CLIENT_SECRET` in the environment override the login (`env | grep EITRI_CLI_CLIENT`); with the user's go-ahead, prefix every `eitri` command with `env -u EITRI_CLI_CLIENT_ID -u EITRI_CLI_CLIENT_SECRET`.
-3. `node --version` ≥ 20 and `git`.
+2. The Eitri CLI, **on its latest release** (install: `npm i -g eitri-cli`). An old CLI passes every check here and then breaks the dev cycle mid-run, after the Console writes, so update it now, without asking:
+   ```bash
+   installed=$(eitri --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+   latest=$(npm view eitri-cli version 2>/dev/null)
+   # sort -V puts the older first; an unreachable registry leaves latest empty and skips the update
+   [ "$(printf '%s\n' "$installed" "$latest" | sort -V | head -1)" != "$latest" ] && eitri self-update
+   eitri --version
+   ```
+   `self-update` failing (permissions on a global install): stop and ask the user to run `! npm i -g eitri-cli@latest`. This is the only update: never update the CLI, or run `eitri app clean`, later in the run without asking.
+3. A **working** Eitri login: `eitri workspace list` must exit 0 — it is the cheap call that authenticates (`eitri workspace current` only reads local files and passes with expired credentials, which then fail the first `push-version` with `403 WrongUserOrPwd`, after every Console write). If it fails, ask the user to run `! eitri login` (interactive). Still failing after it: `EITRI_CLI_CLIENT_ID` / `EITRI_CLI_CLIENT_SECRET` in the environment override the login (`env | grep EITRI_CLI_CLIENT`); with the user's go-ahead, prefix every `eitri` command with `env -u EITRI_CLI_CLIENT_ID -u EITRI_CLI_CLIENT_SECRET`.
+4. `node --version` ≥ 20 and `git`.
 
 ## Phase 1 — Detect
 
