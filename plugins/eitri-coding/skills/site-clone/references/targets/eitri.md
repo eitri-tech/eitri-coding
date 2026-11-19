@@ -28,10 +28,11 @@ These invert the usual recreation rules, so read the tree with them in mind:
 - **Luminus components only — no raw HTML tags.** A captured `<div>` becomes `View`,
   `<p>`/`<span>` become `Text`, `<img>` becomes `Image`, `<button>` becomes `Button`.
   The tree's `tag` field is a hint about *role*, never a component name.
-- **No `style` prop.** Styling is Tailwind + DaisyUI through `className`. Every pixel
-  value from a `styleSet` must land in a Tailwind class or the theme. Sizing props
-  (`width`, `height`, `maxWidth`, `maxHeight`, `minWidth`, `minHeight`) are the
-  exception — they are passed as direct props.
+- **Styling is Tailwind + DaisyUI through `className`.** Every pixel value from a
+  `styleSet` must land in a Tailwind class or the theme. Sizing props (`width`,
+  `height`, `maxWidth`, `maxHeight`, `minWidth`, `minHeight`) are passed as direct
+  props. `style` only for values that arrive at runtime (a CMS color, a computed
+  height) — the `eitri-specialist` rule.
 - **No `hover:` / `focus:` / `active:` / `focus-within:` utilities** — they stick on
   touchscreens. So most of `design/states.json` is *not* portable. Translate hover
   affordances into pressed/disabled states the platform supports, or drop them.
@@ -80,10 +81,21 @@ in this table.
   map each to the project's action resolver (product / category / search / landing
   page / external link).
 
-## Verify on a device
+## Verify: render, compare, fix — one section at a time
 
-There are no automated tests in these projects. Run `eitri app start` (add `-p` if
-the installed CLI needs the playground flag), then use the `eitri-coding:eitri-device` skill's
-tools — `webview_url`, `webview_dom`, `webview_console`, `screenshot` — and compare
-against `screenshots/375-fullpage.png` and the per-section shots. Prefer the WebView
-DOM/console commands over reading pixels.
+Fidelity comes from the loop in `recreate.md`, not from the first build: build a section, render it,
+compare it with `screenshots/sections/<NN>-*@375.png`, fix, move on. There are no automated tests in
+these projects, so the render is the only check.
+
+Keep `eitri app start` (or `eitri start`) running in the background — it rebuilds the dev workspace on
+every save — and render with whichever you have:
+
+- **No device** (the default in a headless session): `eitri-coding:eitri-device` →
+  `tools/browser-preview.mjs --app <workspace> --config <remote config> --compare scrape/<slug>/screenshots/375-fullpage.png`.
+  Read `compare/NN.png` (store and app side by side, one screen each) and `report.json` → `pageErrors`.
+  Same compiled code, theme and live data as on a phone; only the native chrome is missing.
+- **Device or emulator**: the same skill's `webview_url`, `webview_dom`, `webview_console`, `screenshot`.
+  Prefer the WebView DOM/console commands over reading pixels.
+
+After a save, wait for the watcher's "✓ Forjado em …" line for that app before rendering again, and look at every section before
+calling the page done: spacing, type sizes and weights, colors, radius, alignment, what wraps.

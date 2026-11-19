@@ -118,10 +118,14 @@ Categories and component names mirror the official docs. Use this as a quick loo
 
 These render without any error and only show up on the device:
 
+- **`Text` forwards only `id`, `className`, `render` (its tag) and `children`** (Luminus 2.3.6 source). Everything else is dropped without an error:
 - **`onClick` on `Text`** is ignored — put it on the wrapping `View`.
+- **`style` on `Text`** is ignored too, so a runtime color (from the CMS or section data) never reaches it. Put the `style` on the wrapping `View` and let the `Text` inherit it: `<View style={{ color }}><Text className='font-bold'>…</Text></View>`. A text color class on that `Text` would override the inherited color, so leave it off, or put the default class on the `View` too.
 - **Negative z-index** (`-z-10`) sends the element behind the page background, so it disappears. To layer a decoration behind neighbors, keep it at the default level and lift the neighbors with `relative z-[1]`.
 - **New theme classes before a dev-server restart** render transparent (see *Theme* in `eitri-specialist`).
 - **Restyling a shared component from the screen** (`!important`, deep selectors) breaks with the next version of it. Add a prop to the shared component that the caller controls (e.g. a `className` for its background) and version it.
+- **`Video` plays fullscreen on iOS.** It renders `<video playsInline={false}>` with no prop to change it (2.3.6 source), and iOS takes any playback of such a video fullscreen — `autoPlay` included, the moment the screen loads. For a video that plays in place (a stories row, a banner): no `autoPlay`; give it an `id`, then in an effect set `playsinline` / `webkit-playsinline` on the element and call `play()` (muted) only while it is on screen (an `IntersectionObserver`). Android plays inline either way. `create-app`'s `VideoStories` add-on is the reference.
+- **`TextInput` carries DaisyUI's `.input`** (48 px tall, transparent border), loaded after the utilities: a height, border or radius class on it needs `!` (`!h-[58px] !border !border-line`).
 
 ---
 

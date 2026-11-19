@@ -1,0 +1,30 @@
+{
+    "//": "Which template files draw each component componentsProbe.mjs finds, per template repository: fidelity.mjs names them next to each difference. Paths are relative to the mini-app folder of the workspace alias (app-config.yaml → alias).",
+    "https://github.com/eitri-tech/eitri-shopping-template": {
+        "cards": [
+            { "app": "shared", "file": "src/components/ProductCard/ProductCardFullImage.jsx", "note": "appConfigs.productCard.style fullImage" },
+            { "app": "shared", "file": "src/components/ProductCard/ProductCardDefault.jsx", "note": "any other productCard.style" },
+            { "app": "home", "file": "src/components/ProductCard/ProductCard.jsx", "note": "wrapper: texts and actions" }
+        ],
+        "cards.layout": [
+            { "app": "home", "file": "src/components/PageSearchComponents/SearchResults.jsx", "note": "listing grid" },
+            { "app": "home", "file": "src/components/ShelfOfProducts/components/ShelfOfProductsCarousel.jsx", "note": "shelves" }
+        ],
+        "listing.title": [{ "app": "home", "file": "src/views/ProductCatalog.jsx" }],
+        "listing.toolbar": [
+            { "app": "home", "file": "src/components/ProductCatalogContent/ProductCatalogContent.jsx" },
+            { "app": "home", "file": "src/components/ProductCatalogContent/Components/CatalogFilter.jsx" },
+            { "app": "home", "file": "src/components/ProductCatalogContent/Components/CatalogSort.jsx" }
+        ],
+        "pdp.title": [{ "app": "pdp", "file": "src/components/MainDescription/MainDescription.jsx" }],
+        "pdp.price": [{ "app": "pdp", "file": "src/components/MainDescription/MainDescription.jsx" }],
+        "pdp.listPrice": [{ "app": "pdp", "file": "src/components/MainDescription/MainDescription.jsx" }],
+        "pdp.installments": [{ "app": "pdp", "file": "src/components/MainDescription/MainDescription.jsx" }],
+        "pdp.gallery": [{ "app": "pdp", "file": "src/components/ImageCarousel/ImageCarousel.jsx" }],
+        "pdp.option": [{ "app": "pdp", "file": "src/components/SkuSelector/SkuSelector.jsx" }],
+        "pdp.buyButton": [
+            { "app": "pdp", "file": "src/components/ActionButton/ActionButton.jsx" },
+            { "app": "shared", "file": "src/components/CustomButton/CustomButton.jsx" }
+        ]
+    }
+}

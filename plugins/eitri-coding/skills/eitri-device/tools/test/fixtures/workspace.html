@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loading</title>
+<style>body { margin: 0; font-family: sans-serif; } section { height: 900px; border-bottom: 4px solid #24809c; } h1 { word-break: break-all; }</style>
+<script>
+  // The wire protocol of eitri-bifrost (AppConnector): a call is posted as JSON to the native
+  // host; the host answers through window.EITRI.connector.resolvePromise / rejectPromise.
+  (function () {
+    var pool = {}
+    var seq = 0
+    var connector = {
+      resolvePromise: function (m) { if (pool[m.promiseId]) { pool[m.promiseId].resolve(m.res); delete pool[m.promiseId] } },
+      rejectPromise: function (m) { if (pool[m.promiseId]) { pool[m.promiseId].reject(m.res); delete pool[m.promiseId] } },
+    }
+    function invoke(methodName, args) {
+      return new Promise(function (resolve, reject) {
+        var promiseId = Date.now() + '-' + ++seq
+        pool[promiseId] = { resolve: resolve, reject: reject }
+        window.ReactNativeWebView.postMessage(JSON.stringify({ methodName: methodName, promiseId: promiseId, args: args || {} }))
+      })
+    }
+    window.EITRI = { connector: connector, invoke: invoke }
+  })()
+</script>
+</head>
+<body>
+<section><h1 id="out">…</h1></section>
+<section><h2>Mais vendidos</h2><div id="wide" style="width:600px;height:20px;background:#ddd"></div></section>
+<script>
+  ;(async function () {
+    var out = []
+    var config = await EITRI.invoke('environmentGetRemoteConfigs', {})
+    out.push('account=' + config.providerInfo.account)
+    var init = await EITRI.invoke('getInitializationInfos')
+    out.push('route=' + init.route + '/' + typeof init.tabIndex)
+    await EITRI.invoke('storageSetItem', { key: 'k', value: 'v' })
+    out.push('stored=' + (await EITRI.invoke('storageGetItem', { key: 'k' })))
+    var api = new URLSearchParams(location.search).get('api')
+    var res = await EITRI.invoke('httpGet', { url: api + '/items', config: { params: { page: 2 } } })
+    out.push('items=' + res.data.items.length + '@' + res.data.page)
+    try {
+      await EITRI.invoke('httpGet', { url: api + '/missing' })
+      out.push('404=resolved')
+    } catch (e) {
+      out.push('404=' + e.status)
+    }
+    out.push('lang=' + navigator.language)
+    out.push('api=' + new URLSearchParams(location.search).get('api_level'))
+    // The template's i18n takes its language from ?hl=, which the host appends.
+    out.push('hl=' + new URLSearchParams(location.search).get('hl'))
+    await EITRI.invoke('openEitriApp', { slug: 'cart' })
+    await EITRI.invoke('someFutureMethod', {})
+    document.getElementById('out').textContent = out.join(';')
+    document.title = out.join(';')
+  })()
+</script>
+</body>
+</html>

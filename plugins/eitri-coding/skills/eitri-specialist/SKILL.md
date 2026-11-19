@@ -103,6 +103,23 @@ Use **only** these versions — no substitutions:
 - `eitri app start` — Start N Eitri-Apps when in a directory containing `app-config.yaml`
 - `eitri push-version` — Deploy a new version. Add `--shared` for shared-type apps. **Always increment the `version` in `eitri-app.conf.js` before running.** After pushing a shared app, update its pinned version in the `eitri-app.conf.js` of **every** app that consumes it, not only the one you were working on. When merging branches, check the shared version wasn't already taken and bump again if it was.
 - `eitri theme sync | create | publish` — Manage the Luminus theme (see *Theme* below).
+- `eitri app snapshot [-b <branch-name>] [-v]` — A testable build of the application's code, without a version or a publish (see *Snapshots* below).
+
+### Snapshots
+
+A snapshot lets someone test a change on their phone before it is pushed and published: no `version` bump, no environment touched. Docs: <https://docs.eitri.tech/en/quick-guides/snapshots/>.
+
+1. Commit the change (on its own branch when it is a feature: the snapshot is named after the branch, `snapshot-[<branch>]-<n>-<uuid>`; `-b` overrides the name).
+2. In `app-config.yaml`, keep only the Eitri-Apps the change touches (a whole new app keeps them all).
+3. Stop any `eitri app start`: the snapshot runs its own build of every listed mini-app in your remote workspaces, and two builds at once fail.
+4. From the repo root (where `app-config.yaml` is): `eitri app snapshot -v`. It builds each mini-app, then prints a **deeplink** and a **QR code**: `<protocol>-dev://app-snapshot/snapshot-[…]`.
+
+Who can open it:
+
+- The deeplink's scheme is the application's **snapshot deeplink protocol** (Console → the application's settings; `get_application` → `snapshotDeeplinkProtocol`) plus `-dev`. It opens only in the application's **native dev build** that registers that scheme — not in Eitri Play. A new application without its own native app has nothing to open it yet: say so instead of handing out a link nobody can use, and preview through Eitri Play → the `dev` environment.
+- On iOS, paste the deeplink into Notes or Reminders to make it tappable; on Android, use a deeplink tester app.
+- While a snapshot is open, a red dot on the bottom bar marks snapshot mode; tapping it returns to the normal app.
+- Console → the application → **Snapshots** lists every snapshot with its QR code and deeplink.
 
 ---
 
@@ -146,8 +163,16 @@ Eitri does **not** use `App.tsx`. Centralize all global state in the `providers`
 - **Layout direction:** `View` is a flex container laid out as a row by default. Use Tailwind for direction and alignment (`flex-col`, `items-center`, `justify-between`). The `orientation` prop does not work in Luminus v2 — never use it, and replace it with `flex-col` / `flex-row` when you touch code that has it.
 - **Layout** Only do layout for mobile devices because Eitri apps are mobile mini-apps.
 - **Colors:** use theme classes (`bg-primary`, `text-base-content`, named colors from the theme's `extend`). An arbitrary hex (`bg-[#1E5BFF]`) is acceptable only for a true one-off and only if the project allows it; a color used in more than one place becomes a theme token first.
-- **`style` is for runtime values only.** Tailwind classes must be static strings, so a value that arrives at runtime (a color or image coming from the CMS, a computed width) cannot be a class: pass it through `style`, and only when the value exists. Everything static stays in `className`.
+- **`style` is for runtime values only.** Tailwind classes must be static strings, so a value that arrives at runtime (a color or image coming from the CMS, a computed width) cannot be a class: pass it through `style`, and only when the value exists. Everything static stays in `className`. `Text` drops `style`: put a runtime text color on the wrapping `View` (see `eitri-luminus` → Silent pitfalls).
 - **Icons:** prefer `react-icons` (supported version) or the project's existing icon components. A raw `<svg>` is acceptable only inside a dedicated icon component (e.g. `src/components/Icons/`), never inline in a screen.
+
+### Translations
+
+Forge builds each mini-app's i18next resources from `src/locales/<lang>/translation.json` and starts it with the device language Eitri-Play passes (`hl`, e.g. `en-US`, `pt-BR`) and `fallbackLng: "en"`. i18next falls back from `pt-BR` to `pt`, never from `en` to `en-US`, so:
+
+- Name the folders by language: `src/locales/en`, `src/locales/pt`. A regional folder (`pt-BR`, `en-US`) serves only that exact device language.
+- Without an English folder, a phone set to English shows the raw keys (`emptyCart.txtEmptyCart`) — the fallback has nothing to fall back to.
+- Every interface text goes through `t()` with the key in every language file. Store content (CMS, catalog, captured copy) is not translated.
 
 ### Theme
 

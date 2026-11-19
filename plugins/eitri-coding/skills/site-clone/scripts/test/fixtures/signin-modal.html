@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  header { height: 80px; background: #e4002b; }
+  section { height: 600px; border-bottom: 1px solid #ccc; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: 1050; }
+  .modal { position: fixed; inset: 0; z-index: 1055; display: none; }
+  .modal.show { display: block; }
+  /* On phones the dialog is itself a fixed bottom sheet inside the fixed modal. */
+  .modal-content { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; padding: 16px; min-height: 300px; }
+  .btn-close { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; }
+  input { display: block; width: 90%; height: 40px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<header><h1>Loja</h1></header>
+<main>
+  <section><h2>Ofertas</h2></section>
+  <section><h2>Mais vendidos</h2></section>
+</main>
+<!-- A store whose /login is a sign-in modal over the home (Bootstrap shape: a backdrop sibling, then the modal). -->
+<div class="modal fade" id="modal-login">
+  <div class="modal-content">
+    <button class="btn-close" aria-label="Fechar">×</button>
+    <h2>Faça seu login</h2>
+    <form><input type="email" placeholder="Email"><input type="password" placeholder="Senha"><button type="submit">Entrar</button></form>
+  </div>
+</div>
+<script>
+  // Bootstrap's order: the backdrop shows first, the dialog after its fade.
+  const backdrop = document.createElement('div')
+  backdrop.className = 'modal-backdrop fade show'
+  document.body.appendChild(backdrop)
+  setTimeout(() => document.getElementById('modal-login').classList.add('show'), 600)
+  document.querySelector('.btn-close').addEventListener('click', () => {
+    document.getElementById('modal-login').classList.remove('show')
+    document.querySelector('.modal-backdrop')?.remove()
+  })
+</script>
+</body>
+</html>

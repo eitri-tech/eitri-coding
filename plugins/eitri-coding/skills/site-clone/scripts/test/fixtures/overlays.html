@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loja Teste</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  header { height: 80px; background: #0af; }
+  section, footer { height: 500px; border-bottom: 1px solid #ccc; }
+  .nl-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .nl-modal { background: #fff; width: 300px; height: 400px; position: relative; }
+  .nl-close { position: absolute; top: 4px; right: 8px; cursor: pointer; font-size: 24px; }
+  .consent { position: fixed; left: 10px; right: 10px; bottom: 10px; height: 260px; background: #fff; z-index: 2000; }
+</style>
+</head>
+<body>
+<header><h1>Loja Teste</h1></header>
+<main>
+  <section id="hero"><h2>Destaques</h2></section>
+  <section id="shelf"><h2>Mais vendidos</h2></section>
+  <section id="about"><h2>Sobre nós</h2></section>
+</main>
+<footer><h2>Institucional</h2></footer>
+<script>
+  // A marketing popup and a consent banner that both show up after load, like most stores'.
+  setTimeout(() => {
+    const popup = document.createElement('div')
+    popup.className = 'nl-backdrop'
+    popup.innerHTML = '<div class="nl-modal"><span class="nl-close">×</span><strong>Seja bem vindo à Loja Teste</strong></div>'
+    document.body.appendChild(popup)
+    popup.querySelector('.nl-close').addEventListener('click', () => popup.remove())
+  }, 300)
+  setTimeout(() => {
+    const banner = document.createElement('div')
+    banner.className = 'consent'
+    banner.innerHTML = '<p>Controle sua privacidade</p><button id="cmp-reject-all-button">Rejeitar</button><button id="cmp-accept-all-button">Aceitar</button>'
+    document.body.appendChild(banner)
+    banner.querySelector('#cmp-accept-all-button').addEventListener('click', () => banner.remove())
+  }, 1500)
+  // A popup builder's: the close control is an icon-only fragment link inside a zero-size "close" wrapper, and it fades out.
+  setTimeout(() => {
+    const promo = document.createElement('div')
+    promo.className = 'pb_backdrop'
+    promo.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.5)'
+    promo.innerHTML = '<div class="pb_popup" style="position:relative;margin:80px auto;width:320px;height:420px;background:#fff">' +
+      '<strong>Cupom de primeira compra</strong>' +
+      '<div class="pb_content_close"><a href="#__pb_close_content" style="position:absolute;top:0;right:0;width:16px;height:16px;padding:8px">' +
+      '<svg width="16" height="16" viewBox="0 0 10 10"><polygon points="0,1 1,0 10,9 9,10"></polygon></svg></a></div></div>'
+    document.body.appendChild(promo)
+    promo.querySelector('a').addEventListener('click', (e) => { e.preventDefault(); promo.style.opacity = '0.5'; setTimeout(() => promo.remove(), 900) })
+  }, 2200)
+</script>
+</body>
+</html>
