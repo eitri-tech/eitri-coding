@@ -18,7 +18,7 @@ export function parseAppConfig(yaml) {
     const apps = []
     let current
     for (const line of lines.slice(start + 1)) {
-        if (/^\S/.test(line)) break
+        if (/^[^\s-]/.test(line)) break // the next top-level key (list items may sit at column 0)
         const item = /^\s*-\s+(.*)$/.exec(line)
         const pair = /^\s*([\w-]+):\s*(.*)$/.exec(item ? item[1] : line)
         if (item) {
@@ -28,6 +28,30 @@ export function parseAppConfig(yaml) {
         if (pair && current) current[pair[1]] = stripQuotes(pair[2])
     }
     return apps.map((a) => ({ path: a.path, workspace: a.workspace, alias: a.alias, shared: a.shared === "true" }))
+}
+
+/** The mini-app slug, folder and workspace name of an Eitri shopping app: `eitri-shopping-<project>-<alias>`. */
+export function miniAppName(project, alias) {
+    return `eitri-shopping-${project.replace(/^eitri-shopping-/, "")}-${alias}`
+}
+
+/**
+ * Renames `path:` and `workspace:` values of app-config.yaml's top-level `eitri-apps` list
+ * (exact values only; quotes and formatting kept). `moves` is [{ path, toPath, workspace, toWorkspace }].
+ */
+export function rewriteAppEntries(yaml, moves) {
+    const lines = yaml.split("\n")
+    const start = lines.findIndex((line) => /^eitri-apps:\s*$/.test(line))
+    if (start < 0) throw new Error("app-config.yaml has no top-level eitri-apps list")
+    const paths = new Map(moves.map((m) => [m.path, m.toPath]))
+    const workspaces = new Map(moves.map((m) => [m.workspace, m.toWorkspace]))
+    for (let i = start + 1; i < lines.length && !/^[^\s-]/.test(lines[i]); i++) {
+        lines[i] = lines[i].replace(/^(\s*-?\s*(path|workspace):\s*)(['"]?)([^'"\r]*?)\3(\s*\r?)$/, (line, key, name, quote, value, end) => {
+            const to = (name === "path" ? paths : workspaces).get(value)
+            return to === undefined ? line : `${key}${quote}${to}${quote}${end}`
+        })
+    }
+    return lines.join("\n")
 }
 
 /** Writes `value` as a JS string literal in the given quote style. */

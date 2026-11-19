@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { parseAppConfig, rewriteApplicationId, rewriteImports, rewriteSlugRefs } from "../lib/wire.mjs"
+import { miniAppName, parseAppConfig, rewriteAppEntries, rewriteApplicationId, rewriteImports, rewriteSlugRefs } from "../lib/wire.mjs"
 
 const APP_CONFIG = `eitri-apps:
     - path: ./shopping-vtex-template-shared
@@ -63,4 +63,20 @@ test("rewriteApplicationId points app-config.yaml at the new application, keepin
     assert.equal(rewriteApplicationId(`application-id: "tpl"\r\nother: 1\r\n`, "app-new"), `application-id: "app-new"\r\nother: 1\r\n`)
     // No line yet: add one, so `eitri app start` runs against the new application.
     assert.equal(rewriteApplicationId("eitri-apps:\n", "app-new"), "eitri-apps:\napplication-id: app-new\n")
+})
+
+test("rewriteAppEntries renames paths and workspaces of the top-level list only, CRLF and unindented lists too", () => {
+    const moves = [{ path: "./shopping-vtex-template-home", toPath: "./eitri-shopping-loja-home", workspace: "home", toWorkspace: "eitri-shopping-loja-home" }]
+    const out = rewriteAppEntries(APP_CONFIG, moves)
+    assert.match(out, /- path: \.\/eitri-shopping-loja-home\n\s+workspace: eitri-shopping-loja-home\n\s+alias: home/)
+    assert.match(out, /- path: \.\/shopping-vtex-template-shared\n\s+workspace: shared/)
+    assert.match(out, /slug: "shopping-vtex-template-home"/)
+    const flat = "eitri-apps:\r\n- path: './shopping-vtex-template-home'\r\n  workspace: home\r\n  alias: home\r\napplication-id: x\r\n"
+    assert.equal(rewriteAppEntries(flat, moves), "eitri-apps:\r\n- path: './eitri-shopping-loja-home'\r\n  workspace: eitri-shopping-loja-home\r\n  alias: home\r\napplication-id: x\r\n")
+    assert.deepEqual(parseAppConfig(flat).map((a) => a.path), ["./shopping-vtex-template-home"])
+})
+
+test("miniAppName follows eitri-shopping-<project>-<alias> without doubling the prefix", () => {
+    assert.equal(miniAppName("pernambucanas", "home"), "eitri-shopping-pernambucanas-home")
+    assert.equal(miniAppName("eitri-shopping-drogarias-pacheco", "cart"), "eitri-shopping-drogarias-pacheco-cart")
 })

@@ -52,7 +52,10 @@ export function listingState(html, path, known) {
 
 function plan(repo) {
     const profile = readJson(join(repo, ".eitri", "profile.json"), {})
-    const apps = Object.fromEntries((readJson(join(repo, ".eitri", "plan.json"), { apps: [] }).apps ?? []).map((a) => [a.alias, a.path]))
+    const planned = readJson(join(repo, ".eitri", "plan.json"), { apps: [] }).apps ?? []
+    const apps = Object.fromEntries(planned.map((a) => [a.alias, a.path]))
+    // browser-preview finds the dev workspace by name: the plan's (eitri-shopping-<project>-<alias>), else the template's alias.
+    const workspaces = Object.fromEntries(planned.map((a) => [a.alias, a.workspace ?? a.alias]))
     const state = readJson(join(repo, ".eitri", "create-app.state.json"), {})
     const pages = profile.pages ?? {}
     const vtex = profile.platform === "VTEX"
@@ -69,7 +72,7 @@ function plan(repo) {
             ...(note ? { note } : {}),
             commands: {
                 capture: `node ${shell(SCRAPE)} ${shell(url)} --out scrape --name ${name} --bp 375,414 --primary 375 --probe ${shell(PROBE)}`,
-                render: `node ${shell(PREVIEW)} --app ${app} --config .eitri/remote-config.json${initArg} --compare ${capture}/screenshots/375-fullpage.png --probe ${shell(PROBE)} --out preview --name ${name}`,
+                render: `node ${shell(PREVIEW)} --app ${workspaces[app] ?? app} --config .eitri/remote-config.json${initArg} --compare ${capture}/screenshots/375-fullpage.png --probe ${shell(PROBE)} --out preview --name ${name}`,
             },
         })
     }

@@ -52,6 +52,18 @@ test("screens plan: each screen's store capture and the app render that shows th
     assert.deepEqual(plan.apps, { home: "./shopping-vtex-template-home", pdp: "./shopping-vtex-template-pdp", shared: "./shopping-vtex-template-shared" })
 })
 
+test("screens plan: renders open the planned workspace (eitri-shopping-<project>-<alias>)", () => {
+    const dir = repo()
+    writeFileSync(
+        join(dir, ".eitri", "plan.json"),
+        JSON.stringify({ apps: [{ path: "./eitri-shopping-loja-home", workspace: "eitri-shopping-loja-home", alias: "home" }, { path: "./eitri-shopping-loja-pdp", workspace: "eitri-shopping-loja-pdp", alias: "pdp" }] }),
+    )
+    execFileSync(process.execPath, [screens, "plan", "--repo", dir], { encoding: "utf8" })
+    const plan = JSON.parse(readFileSync(join(dir, ".eitri", "screens.json"), "utf8"))
+    assert.match(plan.screens.find((s) => s.name === "pdp").commands.render, /--app eitri-shopping-loja-pdp /)
+    assert.equal(plan.apps.home, "./eitri-shopping-loja-home")
+})
+
 test("fidelity check: per screen, every difference with the template files that draw it; a spec sheet that always exits 0", () => {
     const dir = repo()
     execFileSync(process.execPath, [screens, "plan", "--repo", dir], { encoding: "utf8" })
