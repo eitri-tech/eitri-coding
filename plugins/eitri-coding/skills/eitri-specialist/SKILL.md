@@ -121,6 +121,10 @@ Who can open it:
 - While a snapshot is open, a red dot on the bottom bar marks snapshot mode; tapping it returns to the normal app.
 - Console → the application → **Snapshots** lists every snapshot with its QR code and deeplink.
 
+### Version Bump Reminder
+
+**After completing any coding task — and again before creating or updating a pull request** — chain to the `eitri-version-bump` skill to remind the user about incrementing the version. This is mandatory — forgetting to bump causes deploy failures and version conflicts. The companion skill offers an automated Python script that handles patch/minor/major bumps in `eitri-app.conf.js`.
+
 ---
 
 ## File-Based Routing & Parameters
