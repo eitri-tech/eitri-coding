@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loja Rolagem</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  header { height: 80px; background: #0af; }
+  section { height: 600px; border-bottom: 1px solid #ccc; }
+  footer { height: 500px; background: #eee; }
+  .exit-backdrop { position: fixed; inset: 0; background: rgba(255, 0, 255, .95); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .exit-modal { background: #fff; width: 300px; height: 300px; position: relative; }
+  .exit-close { position: absolute; top: 4px; right: 8px; font-size: 24px; cursor: pointer; }
+</style>
+</head>
+<body>
+<header><h1>Loja Rolagem</h1></header>
+<main>
+  <section><h2>Destaques</h2></section>
+  <section><h2>Mais vendidos</h2></section>
+  <section><h2>Novidades</h2></section>
+</main>
+<footer><h2>Institucional</h2></footer>
+<script>
+  // An "exit" popup: it opens whenever the visitor reaches the footer, so it shows up again
+  // long after load — each time the footer scrolls into view.
+  new IntersectionObserver(entries => {
+    if (!entries.some(e => e.isIntersecting) || document.querySelector('.exit-backdrop')) return
+    const popup = document.createElement('div')
+    popup.className = 'exit-backdrop'
+    popup.innerHTML = '<div class="exit-modal"><span class="exit-close">×</span><strong>Antes de sair: 10% OFF</strong></div>'
+    document.body.appendChild(popup)
+    popup.querySelector('.exit-close').addEventListener('click', () => popup.remove())
+  }).observe(document.querySelector('footer'))
+</script>
+</body>
+</html>

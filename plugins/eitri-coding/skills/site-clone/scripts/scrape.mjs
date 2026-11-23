@@ -12,6 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { pathToFileURL } from 'node:url'
 
 /* ------------------------------------------------------------------ args -- */
 
@@ -43,6 +44,9 @@ site-clone capture engine
                        npx playwright open --save-storage=auth.json <url>
   --header "K: V"    extra request headers, comma-separated for several
   --timeout <ms>     navigation timeout                (default: 60000)
+  --probe <module>   a module whose default export runs in the primary page
+                     (page.evaluate); its result goes to probe.json
+                     (create-app: scripts/lib/componentsProbe.mjs)
 `)
   process.exit(argv.length && !flag('help') ? 1 : 0)
 }
@@ -307,8 +311,21 @@ window.__sc = (function () {
         try { same = !!f.contentDocument } catch (e) {}
         frames.push({ src: f.src || '(srcdoc)', size: [Math.round(r.width), Math.round(r.height)], sameOrigin: same });
       });
+      // Custom elements: third-party widgets (stories, reviews, chat) mount as web components; one still showing its
+      // loading skeleton when captured holds none of its real content.
+      var custom = {};
+      document.querySelectorAll('*').forEach(function (e) {
+        var tag = e.tagName.toLowerCase();
+        if (tag.indexOf('-') < 0) return;
+        var c = custom[tag] || (custom[tag] = { tag: tag, count: 0, placeholder: false });
+        c.count++;
+        var busy = e.getAttribute('aria-busy') === 'true' ||
+          [].some.call(e.querySelectorAll('*'), function (d) { return [].some.call(d.attributes, function (a) { return /skeleton|placeholder|loading/i.test(a.name) || /skeleton/i.test(a.value) }) });
+        if (busy && !(e.textContent || '').trim()) c.placeholder = true;
+      });
       return {
         shadowHosts: hosts,
+        customElements: Object.keys(custom).map(function (k) { return custom[k] }).slice(0, 40),
         iframes: frames,
         canvases: document.querySelectorAll('canvas').length,
         openDialogs: document.querySelectorAll('dialog[open],[aria-modal="true"]').length
@@ -467,8 +484,26 @@ const collectOutline = () => {
       const own = [...c.childNodes].filter(n => n.nodeType === 3).map(n => n.nodeValue).join(' ').replace(/\s+/g, ' ').trim()
       const sec = c.closest('[data-sc-section]')
       const s = sec ? Number(sec.getAttribute('data-sc-section')) : null
-      if (/^h[1-6]$/.test(t)) out.push({ section: s, type: t, text: c.textContent.replace(/\s+/g, ' ').trim() })
-      else if (t === 'img') out.push({ section: s, type: 'img', alt: c.alt || '', src: c.currentSrc || c.src })
+      if (/^h[1-6]$/.test(t)) {
+        // A screen-reader-only heading (the "visually-hidden" 1×1 box) is in the page for assistive tech, not on screen.
+        const r = c.getBoundingClientRect()
+        out.push({ section: s, type: t, text: c.textContent.replace(/\s+/g, ' ').trim(), ...(r.width <= 1 || r.height <= 1 ? { srOnly: true } : {}) })
+      }
+      else if (t === 'img') {
+        // The link an image sits in is where a banner leads, and its rendered box tells a slide (one per
+        // screen) from tiles side by side: without them the capture loses every banner's destination and layout.
+        const link = c.closest('a[href]')
+        const r = c.getBoundingClientRect()
+        const box = [r.left + window.scrollX, r.top + window.scrollY, r.width, r.height].map(Math.round)
+        // Clipped round by itself or a wrapper (a brand or category circle): the app draws it round too.
+        let round = false
+        for (let e = c, i = 0; e && i < 3 && !round; e = e.parentElement, i++) {
+          const radius = getComputedStyle(e).borderTopLeftRadius
+          const w = e.getBoundingClientRect().width
+          round = radius.endsWith('%') ? parseFloat(radius) >= 50 : w > 0 && parseFloat(radius) >= w / 2 - 1
+        }
+        out.push({ section: s, type: 'img', alt: c.alt || '', src: c.currentSrc || c.src, box, ...(link ? { href: link.href } : {}), ...(round ? { round: true } : {}) })
+      }
       else if (t === 'a' && c.textContent.trim()) out.push({ section: s, type: 'link', text: c.textContent.replace(/\s+/g, ' ').trim().slice(0, 200), href: c.href })
       else if (t === 'button' && c.textContent.trim()) out.push({ section: s, type: 'button', text: c.textContent.replace(/\s+/g, ' ').trim().slice(0, 120) })
       else if ((t === 'input' || t === 'textarea' || t === 'select')) out.push({ section: s, type: t, inputType: c.type || '', placeholder: c.placeholder || '', label: (c.labels && c.labels[0] ? c.labels[0].textContent.trim() : '') })
@@ -531,7 +566,7 @@ const collectSvgs = () => {
     if (map.has(key)) { map.get(key).uses++; continue }
     map.set(key, {
       uses: 1,
-      name: s.getAttribute('aria-label') || s.querySelector('title')?.textContent?.trim() || (s.closest('[class]')?.className || '').toString().split(/\s+/)[0] || 'icon',
+      name: s.getAttribute('aria-label') || s.querySelector('title')?.textContent?.trim() || (s.closest('[class]')?.getAttribute('class') || '').trim().split(/\s+/)[0] || 'icon',
       section: sec ? Number(sec.getAttribute('data-sc-section')) : null,
       viewBox: s.getAttribute('viewBox') || '',
       size: [Math.round(s.getBoundingClientRect().width), Math.round(s.getBoundingClientRect().height)],
@@ -698,22 +733,211 @@ const CONSENT = [
   '#didomi-notice-agree-button', '.cc-allow', '.cookie-accept', '[data-testid*="accept" i]'
 ]
 
-async function settle (page) {
-  let dismissed = false
+/** Accepts a consent banner; returns how, or null when none is showing. */
+async function acceptConsent (page) {
   for (const sel of CONSENT) {
     try {
       const el = page.locator(sel).first()
-      if (await el.isVisible({ timeout: 250 })) { await el.click({ timeout: 1500 }); dismissed = true; break }
+      if (await el.isVisible({ timeout: 250 })) { await clickAnyway(el); return `consent banner (${sel})` }
     } catch {}
   }
-  if (!dismissed) {
-    // Fall back to the button label — most consent walls are not OneTrust.
+  // Fall back to the button label — most consent walls are not OneTrust.
+  try {
+    const btn = page.getByRole('button', { name: /^(accept|accept all|allow all|agree|i agree|got it|ok|aceitar|aceitar todos|concordo|entendi|akzeptieren|aceptar)$/i }).first()
+    if (await btn.isVisible({ timeout: 500 })) { await clickAnyway(btn); return 'consent banner (its accept button)' }
+  } catch {}
+  return null
+}
+
+/** A real click, or a DOM click when another layer (a popup over the banner) intercepts it. */
+async function clickAnyway (locator) {
+  try { await locator.click({ timeout: 1500 }) } catch { await locator.evaluate(e => e.click()) }
+}
+
+// In-page: the first visible fixed layer covering most of the viewport (a
+// newsletter / welcome / coupon popup) and its own close control, marked with
+// data-sc-close. Never an app shell (one holding <main> or most of the DOM), and
+// never a link that would navigate away.
+const FIND_POPUP = () => {
+  const visible = el => {
+    const r = el.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
+  }
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '')
+  // A popup paints: a tinted backdrop, or a dialog of real size inside it. An empty
+  // transparent click-catcher (behind a tooltip or a menu) covers nothing anyone sees.
+  const paints = el => {
+    const cs = getComputedStyle(el)
+    const alpha = (cs.backgroundColor.match(/[\d.]+/g) || []).map(Number)
+    if (cs.backgroundImage !== 'none' || (alpha.length === 3) || (alpha.length === 4 && alpha[3] > 0.05)) return true
+    return [...el.querySelectorAll('*')].some(c => { const r = c.getBoundingClientRect(); return r.width >= 120 && r.height >= 80 && visible(c) })
+  }
+  const total = document.body.getElementsByTagName('*').length
+  const overlays = [...document.body.querySelectorAll('*')].filter(el => {
+    if (getComputedStyle(el).position !== 'fixed' || !visible(el) || el.hasAttribute('data-sc-stuck')) return false
+    const r = el.getBoundingClientRect()
+    // What it covers of the screen, not its size: a drawer parked off-canvas covers nothing.
+    const shownW = Math.min(r.right, innerWidth) - Math.max(r.left, 0)
+    const shownH = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)
+    if (shownW < innerWidth * 0.6 || shownH < innerHeight * 0.5) return false
+    return !el.querySelector('main') && el.getElementsByTagName('*').length < Math.max(600, total * 0.5) && paints(el)
+  }).filter((el, _, all) => !all.some(o => o !== el && o.contains(el)))
+  const CLOSE_TEXT = /^(×|✕|✖|✗|x|fechar|close|cerrar|schließen|não, obrigado|nao, obrigado|no thanks)$/i
+  const CLOSE_ATTR = /close|fechar|dismiss|cerrar/i
+  for (const overlay of overlays) {
+    const controls = [...overlay.querySelectorAll('button, a, [role="button"], span, div, i, svg, img')].filter(el => {
+      if (!visible(el)) return false
+      const r = el.getBoundingClientRect()
+      if (r.width > 160 || r.height > 80) return false
+      if (el.tagName === 'A' && !/^(#|javascript:|$)/i.test(el.getAttribute('href') || '')) return false
+      const label = [el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('alt')].filter(Boolean).join(' ')
+      const named = [el.id, typeof el.className === 'string' ? el.className : el.getAttribute('class')].filter(Boolean).join(' ')
+      const href = el.tagName === 'A' ? el.getAttribute('href') || '' : ''
+      // Popup builders wrap an icon-only link in a (often zero-size) "…close…" element.
+      const wrapper = el.parentElement && el.parentElement.closest('[class*="close" i], [id*="close" i]')
+      const inCloseWrapper = !!wrapper && wrapper !== overlay && overlay.contains(wrapper)
+      return CLOSE_TEXT.test((el.textContent || '').trim()) || CLOSE_ATTR.test(label) || CLOSE_ATTR.test(named) || CLOSE_ATTR.test(href) || inCloseWrapper
+    })
+    // The innermost match is the control itself, not a wrapper around it; an icon clicks through its link or button.
+    const inner = controls.find(c => !controls.some(o => o !== c && c.contains(o)))
+    const clickable = inner && inner.closest('a, button, [role="button"]')
+    const control = clickable && overlay.contains(clickable) ? clickable : inner
+    if (control) { overlay.setAttribute('data-sc-overlay', ''); control.setAttribute('data-sc-close', ''); return { overlay: describe(overlay), control: describe(control) } }
+    overlay.setAttribute('data-sc-stuck', '')
+    return { overlay: describe(overlay), control: null }
+  }
+  return null
+}
+
+// In-page: a fixed layer holding a visible password field is a sign-in dialog — a store whose /login
+// opens as a modal over the home — so it is the page being captured, not a popup to close. It and the
+// tinted backdrop under it are marked stuck, which FIND_POPUP looks past. Returns the newly kept dialogs.
+const KEEP_SIGN_IN = () => {
+  const visible = el => {
+    const r = el.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
+  }
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '')
+  const kept = []
+  for (const input of document.querySelectorAll('input[type="password"]')) {
+    if (!visible(input)) continue
+    // Every fixed ancestor: the dialog can itself be fixed (a bottom sheet) inside the covering layer.
+    const layers = []
+    for (let el = input.parentElement; el && el !== document.body; el = el.parentElement) {
+      if (getComputedStyle(el).position === 'fixed') layers.push(el)
+    }
+    const outer = layers.at(-1)
+    if (!outer || outer.hasAttribute('data-sc-signin')) continue
+    for (const layer of layers) { layer.setAttribute('data-sc-signin', ''); layer.setAttribute('data-sc-stuck', '') }
+    kept.push(describe(outer))
+  }
+  if (document.querySelector('[data-sc-signin]')) {
+    for (const el of document.body.querySelectorAll('[class*="backdrop" i]')) {
+      // Fixed is enough: a backdrop still fading in (opacity 0) is the dialog's all the same.
+      if (getComputedStyle(el).position === 'fixed') el.setAttribute('data-sc-stuck', '')
+    }
+  }
+  return kept
+}
+
+/**
+ * Closes popups and accepts consent banners, alternating until neither is left
+ * (a popup can sit on top of the banner, or the other way round). Returns what
+ * it did, for the bundle's warnings.
+ */
+async function dismissOverlays (page) {
+  const done = []
+  const keepSignIn = async () => {
     try {
-      const btn = page.getByRole('button', { name: /^(accept|accept all|allow all|agree|i agree|got it|ok|aceitar|aceitar todos|concordo|entendi|akzeptieren|aceptar)$/i }).first()
-      if (await btn.isVisible({ timeout: 500 })) { await btn.click({ timeout: 1500 }); dismissed = true }
+      for (const dialog of await page.evaluate(KEEP_SIGN_IN)) done.push(`Kept the sign-in dialog ${dialog} open: a layer with a password field is the page, not a popup.`)
     } catch {}
   }
-  if (dismissed) await page.waitForTimeout(600)
+  let consentDone = false
+  for (let round = 0; round < 5; round++) {
+    let acted = false
+    if (!consentDone) {
+      const consent = await acceptConsent(page)
+      if (consent) { consentDone = acted = true; done.push(`Dismissed ${consent} before capturing.`); await page.waitForTimeout(400) }
+    }
+    // Right before looking for popups: a sign-in modal can open while the consent banner is handled.
+    await keepSignIn()
+    let found = null
+    try { found = await page.evaluate(FIND_POPUP) } catch {}
+    if (found && !found.control) {
+      acted = true // marked stuck: the next round looks past it
+      // A backdrop shows before its dialog (Bootstrap fades it in first): when that dialog is a
+      // sign-in, the backdrop is part of the page being captured, not a stuck popup.
+      let signIn = false
+      if (/backdrop/i.test(found.overlay)) {
+        await page.waitForTimeout(800)
+        await keepSignIn()
+        try { signIn = await page.evaluate(() => !!document.querySelector('[data-sc-signin]')) } catch {}
+      }
+      if (!signIn) done.push(`A fixed overlay (${found.overlay}) covers the page and has no close control the capture recognises: re-run with --click "<its close selector>".`)
+    } else if (found) {
+      acted = true
+      try { await clickAnyway(page.locator('[data-sc-close]').first()) } catch {}
+      // Popups fade out: wait for it to go rather than judging it mid-animation.
+      try {
+        await page.waitForFunction(() => {
+          const o = document.querySelector('[data-sc-overlay]')
+          return !o || !o.isConnected || getComputedStyle(o).display === 'none' || getComputedStyle(o).visibility === 'hidden' || o.getBoundingClientRect().height === 0
+        }, null, { timeout: 3000 })
+      } catch {}
+      let still = false
+      try {
+        still = await page.evaluate(() => {
+          const o = document.querySelector('[data-sc-overlay]')
+          const shown = !!o && o.isConnected && getComputedStyle(o).display !== 'none' && getComputedStyle(o).visibility !== 'hidden' && o.getBoundingClientRect().height > 0
+          document.querySelectorAll('[data-sc-close],[data-sc-overlay]').forEach(e => { e.removeAttribute('data-sc-close'); e.removeAttribute('data-sc-overlay') })
+          if (o && shown) o.setAttribute('data-sc-stuck', '')
+          return shown
+        })
+      } catch {}
+      done.push(still
+        ? `A popup (${found.overlay}) did not close through ${found.control}: re-run with --click "<its close selector>".`
+        : `Dismissed popup ${found.overlay} through ${found.control} before capturing.`)
+    }
+    if (!acted) break
+  }
+  return done
+}
+
+// In-page: fixed layers that are not on screen — drawers parked outside the viewport (bottom: -100%,
+// right: -100%…) and panels waiting at opacity 0 (a mini-cart) — are hidden, so a full-page shot (which
+// stretches the viewport) does not paint them over the page and nothing reads their content as the page's.
+const HIDE_OFF_CANVAS = () => {
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '')
+  const hidden = []
+  for (const el of document.body.querySelectorAll('*')) {
+    if (el.hasAttribute('data-sc-offcanvas')) continue
+    const cs = getComputedStyle(el)
+    if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue
+    const r = el.getBoundingClientRect()
+    const outside = r.top >= innerHeight || r.bottom <= 0 || r.left >= innerWidth || r.right <= 0
+    if (!outside && Number(cs.opacity) > 0.05) continue
+    if (!el.textContent.trim() && !el.querySelector('img, svg, video')) continue
+    el.setAttribute('data-sc-offcanvas', '')
+    hidden.push(describe(el))
+  }
+  if (hidden.length && !document.getElementById('sc-offcanvas')) {
+    const style = document.createElement('style')
+    style.id = 'sc-offcanvas'
+    style.textContent = '[data-sc-offcanvas], [data-sc-offcanvas] * { visibility: hidden !important }'
+    document.head.appendChild(style)
+  }
+  return hidden
+}
+
+/** Brings the page to the state the capture records; returns the dismissal notes. */
+async function settle (page) {
+  const notes = await dismissOverlays(page)
+  if (notes.length) await page.waitForTimeout(600)
   for (const sel of CLICKS) {
     try { await page.locator(sel).first().click({ timeout: 3000 }); await page.waitForTimeout(600) } catch { log('click failed:', sel) }
   }
@@ -725,13 +949,20 @@ async function settle (page) {
   })
   try { await page.waitForLoadState('networkidle', { timeout: 8000 }) } catch {}
   await page.waitForTimeout(WAIT)
+  // Consent banners and marketing popups often show up seconds after load, or on scroll.
+  const late = await dismissOverlays(page)
+  if (late.length) await page.waitForTimeout(600)
+  let offCanvas = []
+  try { offCanvas = await page.evaluate(HIDE_OFF_CANVAS) } catch {}
+  const parked = offCanvas.length ? [`Hid ${offCanvas.length} off-canvas layer(s) (drawers outside the screen or at opacity 0) before capturing: ${offCanvas.slice(0, 6).join(', ')}.`] : []
+  return [...notes, ...late, ...parked]
 }
 
 async function loadChromium () {
   for (const spec of ['playwright', 'playwright-core']) {
     try { return (await import(spec)).chromium } catch {}
   }
-  console.error(`\nPlaywright is not installed for this skill. Run once:\n\n  cd ${import.meta.dirname} && npm install\n`)
+  console.error(`\nPlaywright is not installed for this skill. Run once:\n\n  cd ${import.meta.dirname} && npm ci && npx playwright install chromium\n`)
   process.exit(1)
 }
 
@@ -753,6 +984,17 @@ async function main () {
     const ct = (res.headers()['content-type'] || '').split(';')[0]
     const rec = { url, type, status: res.status(), contentType: ct }
     network.push(rec)
+    // API calls (a reviews widget, a video feed…): what they send and a sample of the answer, so the
+    // integration can be rebuilt from them. Never request headers or cookies.
+    if ((type === 'xhr' || type === 'fetch') && ct !== 'text/css') {
+      rec.method = req.method()
+      const post = req.postData()
+      if (post) rec.postData = clip(post, 4096)
+      if (/json|text|javascript|xml/.test(ct)) {
+        try { rec.response = clip((await res.body()).toString('utf8'), 8192) } catch {}
+      }
+      return
+    }
     if (responses.has(url)) return
     if (!/stylesheet|font|image|media/.test(type) && ct !== 'text/css') return
     try {
@@ -797,6 +1039,7 @@ async function main () {
 
   const perBp = {}
   const domRefs = new Set()
+  const dismissals = new Set()
   let primaryPage = null
 
   for (const bp of BPS) {
@@ -806,7 +1049,7 @@ async function main () {
     try {
       await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: TIMEOUT })
     } catch (e) { console.error('   navigation:', e.message) }
-    await settle(page)
+    for (const note of await settle(page)) { dismissals.add(note); log(`  ${note}`) }
 
     const sections = await safe(`section split @${bp}`, () => page.evaluate(f => window.__sc.sections(f), FORCE_SECTIONS), [])
     log(`  ${sections.length} sections`)
@@ -817,6 +1060,8 @@ async function main () {
       if (t) trees.push({ meta: s, tree: t })
     }
 
+    // Popups on a long timer can land while the trees are read: keep them out of the pictures.
+    for (const note of await dismissOverlays(page)) dismissals.add(note)
     mk(path.join(OUT, 'screenshots'))
     try { await page.screenshot({ path: path.join(OUT, 'screenshots', `${bp}-fullpage.png`), fullPage: true }) } catch (e) { log('  fullpage shot failed:', e.message) }
     try { await page.screenshot({ path: path.join(OUT, 'screenshots', `${bp}-viewport.png`) }) } catch {}
@@ -825,7 +1070,13 @@ async function main () {
     for (const s of sections) {
       const name = `${pad(s.index)}-${slug(s.heading || s.id || s.classes.split(/\s+/)[0] || s.tag)}@${bp}.png`
       try {
-        await page.locator(`[data-sc-section="${s.index}"]`).screenshot({ path: path.join(OUT, 'screenshots', 'sections', name), timeout: 15000 })
+        const section = page.locator(`[data-sc-section="${s.index}"]`)
+        // A popup can open again long after load — on a timer, or when this part of the page scrolls
+        // into view (an exit popup on the footer): bring the section in, let it fire, close it, then shoot.
+        await section.scrollIntoViewIfNeeded({ timeout: 5000 })
+        await page.waitForTimeout(250)
+        for (const note of await dismissOverlays(page)) dismissals.add(note)
+        await section.screenshot({ path: path.join(OUT, 'screenshots', 'sections', name), timeout: 15000 })
       } catch {}
     }
 
@@ -835,17 +1086,24 @@ async function main () {
     else await page.close()
   }
 
-  if (!primaryPage) { primaryPage = await (await makeContext(PRIMARY)).newPage(); await primaryPage.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: TIMEOUT }); await settle(primaryPage); await primaryPage.evaluate(f => window.__sc.sections(f), FORCE_SECTIONS) }
+  if (!primaryPage) { primaryPage = await (await makeContext(PRIMARY)).newPage(); await primaryPage.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: TIMEOUT }); for (const note of await settle(primaryPage)) dismissals.add(note); await primaryPage.evaluate(f => window.__sc.sections(f), FORCE_SECTIONS) }
 
+  for (const note of await dismissOverlays(primaryPage)) dismissals.add(note)
   log('design tokens, outline, behaviors, svgs')
   const design = await safe('design tokens', () => primaryPage.evaluate(collectDesign),
     { cssVariables: {}, sampled: 0, typographyByTag: {}, frequencies: {}, fontUsage: [] })
   const outline = await safe('content outline', () => primaryPage.evaluate(collectOutline), [])
+  if (opt('probe')) {
+    const probeFn = (await import(pathToFileURL(path.resolve(opt('probe'))).href)).default
+    const probed = await safe('probe', () => primaryPage.evaluate(probeFn), null)
+    fs.mkdirSync(OUT, { recursive: true })
+    fs.writeFileSync(path.join(OUT, 'probe.json'), JSON.stringify(probed, null, 2))
+  }
   const behaviors = await safe('behaviors', () => primaryPage.evaluate(collectBehaviors),
     { pinned: [], horizontalScrollers: [], disclosure: [], overlays: [], animated: [], forms: [], globals: [], autoplayMedia: [] })
   const svgs = await safe('inline svgs', () => primaryPage.evaluate(collectSvgs), [])
   const census = await safe('census', () => primaryPage.evaluate(() => window.__sc.census()),
-    { shadowHosts: 0, iframes: [], canvases: 0, openDialogs: 0 })
+    { shadowHosts: 0, customElements: [], iframes: [], canvases: 0, openDialogs: 0 })
 
   log('css: matching rules against the rendered DOM')
   const cssSheets = [...responses.entries()]
@@ -1040,11 +1298,13 @@ async function main () {
   }
   wTXT(path.join(OUT, 'content', 'copy.md'), copy)
 
-  const warnings = [...phaseErrors]
+  const warnings = [...phaseErrors, ...dismissals]
   if (sectionIndex.length > 30) warnings.push(`${sectionIndex.length} sections is unusually many — the split has probably fragmented. Compare against screenshots/ and re-run with --sections.`)
   if (!sectionIndex.length) warnings.push('No sections detected — the page may be blocked, empty, or behind a consent wall. Check screenshots/, then re-run with --sections.')
   if (census.shadowHosts) warnings.push(`${census.shadowHosts} shadow root(s): trees include their contents, and scoped rules are in css/shadow.css (NOT applied by snapshot.html).`)
-  for (const f of census.iframes) warnings.push(`iframe ${f.sameOrigin ? '(same-origin)' : '(cross-origin — not captured at all)'} ${f.size.join('x')}: ${f.src}`)
+  for (const f of census.iframes) warnings.push(`iframe ${f.sameOrigin ? '(same-origin)' : '(cross-origin — not captured at all)'} ${f.size.join('x')}: ${shortSrc(f.src)}`)
+  const loading = (census.customElements || []).filter(e => e.placeholder).map(e => `<${e.tag}>`)
+  if (loading.length) warnings.push(`${loading.length} widget(s) were still loading when captured (${loading.join(', ')}): their content is not in this bundle. See README → Third-party widgets.`)
   if (census.canvases) warnings.push(`${census.canvases} <canvas> element(s): pixels only, no structure. Screenshots are all you get.`)
   if (css.kept.length < 50) warnings.push(`Only ${css.kept.length} CSS rules matched — suspiciously few. The page may render from inline styles, or stylesheets failed to parse.`)
   if (!images.length && !flag('no-assets')) warnings.push('No images kept. If the page has images, they may be loaded in a way the capture missed.')
@@ -1068,16 +1328,52 @@ async function main () {
     },
     stylesheets: { parsed: css.parsed, total: css.total, failed: css.failed },
     census,
+    thirdParty: { hosts: thirdPartyHosts(network, TARGET), customElements: census.customElements || [] },
     warnings
   })
 
-  wTXT(path.join(OUT, 'README.md'), readme({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings }))
+  wTXT(path.join(OUT, 'README.md'), readme({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings, thirdParty: { hosts: thirdPartyHosts(network, TARGET), customElements: census.customElements || [] } }))
   console.log(`\n✓ ${sectionIndex.length} sections · ${css.kept.length} css rules · ${images.length} images · ${fonts.length} fonts`)
   for (const w of warnings) console.log('  ! ' + w)
   console.log(`  open ${path.join(OUT, 'README.md')}\n`)
 }
 
 /* ---------------------------------------------------------------- readme -- */
+
+/** The domain a host belongs to: the last two labels, three under a country's second level (store.com.br). */
+function siteOf (host) {
+  const labels = host.toLowerCase().split('.')
+  const n = labels.length >= 3 && labels.at(-1).length === 2 && /^(com|net|org|gov|edu|co)$/.test(labels.at(-2)) ? 3 : 2
+  return labels.slice(-n).join('.')
+}
+
+function clip (text, max) {
+  return text.length > max ? `${text.slice(0, max)}… (${text.length} chars)` : text
+}
+
+/** Third-party domains the page requested, most requests first; the store's own (its name in the host) are left out. */
+function thirdPartyHosts (network, target) {
+  let own = ''
+  try { own = siteOf(new URL(target).hostname).split('.')[0] } catch {}
+  const counts = {}
+  for (const r of network || []) {
+    let host
+    try { host = new URL(r.url).hostname } catch { continue }
+    if (!/^https?:/.test(r.url) || (own && host.includes(own))) continue
+    const site = siteOf(host)
+    counts[site] = (counts[site] || 0) + 1
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([host, requests]) => ({ host, requests }))
+}
+
+/** An iframe source fit for a one-line warning: an inline data: document by its type and length, a long URL cut. */
+function shortSrc (src = '') {
+  if (src.startsWith('data:')) {
+    const end = src.search(/[,;]/)
+    return `${src.slice(0, end > 0 ? end : 40)} (inline, ${src.length} chars)`
+  }
+  return src.length > 200 ? `${src.slice(0, 200)}…` : src
+}
 
 function table (title, obj, cols = ['value', 'uses']) {
   const rows = Object.entries(obj || {})
@@ -1086,7 +1382,7 @@ function table (title, obj, cols = ['value', 'uses']) {
     rows.map(([k, v]) => `| \`${k}\` | ${v} |`).join('\n') + '\n\n'
 }
 
-function readme ({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings }) {
+function readme ({ design, css, sectionIndex, images, fonts, svgs, behaviors, outline, warnings, thirdParty }) {
   const f = design.frequencies
   let md = `# Capture — ${TARGET}
 ${warnings.length ? '\n> **Check these before building.**\n' + warnings.map(w => '> - ' + w).join('\n') + '\n' : ''}
@@ -1170,6 +1466,15 @@ Playwright MCP and note what you find.
 
 Only assets actually referenced by the DOM or by a matching CSS rule are kept;
 tracking pixels and third-party beacons are dropped.
+
+## Third-party widgets and services
+
+Reviews, video stories, chat and analytics load from other domains and often mount as custom
+elements. A rebuild does not get them for free: decide for each whether the target can integrate it.
+
+${(thirdParty?.customElements || []).map(e => `- \`<${e.tag}>\` ×${e.count}${e.placeholder ? ' — still loading when captured: its content is not in this bundle' : ''}`).join('\n') || '- no custom elements'}
+
+${(thirdParty?.hosts || []).length ? '| domain | requests |\n|---|---|\n' + thirdParty.hosts.map(h => `| ${h.host} | ${h.requests} |`).join('\n') : 'No third-party requests.'}
 
 ## Coverage caveats
 

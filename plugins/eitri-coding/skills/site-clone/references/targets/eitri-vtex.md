@@ -44,7 +44,9 @@ before creating a new one. Read `sections.json` and the component map first.
 - **Links** — reuse the `action` object already defined in `sections.json` (product,
   category, collection, search, landing page, external link). It is resolved by the
   project's action handler (commonly `src/services/ResolveCmsActions.js`); map each
-  captured URL from `content/outline.json` to one of those action types.
+  captured URL from `content/outline.json` to one of those action types. A FastStore
+  product URL is `/<linkText>-<skuId>/p`: its path segment is not a slug the catalog knows —
+  map it to a product action by product id (the catalog's `fq=skuId:<skuId>` answers it).
 - **Shelves** — the schema holds the *query* (collection, category, sort, limit),
   never product data. Products come from VTEX search through the existing shelf
   components.

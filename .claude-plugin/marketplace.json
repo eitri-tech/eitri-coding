@@ -10,7 +10,7 @@
     {
       "name": "eitri-coding",
       "source": "./plugins/eitri-coding",
-      "description": "Eitri Expert Front-End Developer — builds mobile-first Eitri-Apps with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, and clones live websites into Eitri views.",
+      "description": "Eitri Expert Front-End Developer — builds mobile-first Eitri-Apps with Luminus + Bifrost, drives them on Android devices and iOS simulators, connects to the Eitri Manager MCP, clones live websites into Eitri views, and creates a complete Eitri app from a store URL.",
       "category": "development",
       "tags": ["eitri", "mobile", "frontend", "mcp"],
       "homepage": "https://eitri.tech"
